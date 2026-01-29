@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+// 1. User System (Compatible with NextAuth)
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  role          String    @default("USER") // USER, ADMIN, OWNER
+  createdAt     DateTime  @default(now())
+
+  accounts    Account[]
+  sessions    Session[]
+  bookings    Booking[]
+  reviews     Review[]
+  hotelsOwned Hotel[] // For Hotel Owners
+}
+
+// 2. Hotel System
+model Hotel {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  address     String
+  city        String
+  price       Int // Base price
+  images      String // Stored as JSON string or comma-separated
+  amenities   String // Stored as JSON string or comma-separated
+  rating      Float    @default(0)
+  
+  // RoamFast Quality Score (0-100)
+  qualityScore  Float?   @default(0)
+  scoreBreakdown String? // JSON: { cleanliness, service, amenities, feedback, responsiveness }
+  lastScoreUpdate DateTime? // Track when score was last calculated
+  
+  // Brand Control Mode (Gold/Platinum Tiers)
+  customBranding     String? // JSON: { primaryColor, accentColor, logoUrl }
+  brandStory         String? // Hotel philosophy/story (max 500 words)
+  featuredImages     String? // JSON array of premium hero images
+
+  ownerId String?
+  owner   User?   @relation(fields: [ownerId], references: [id])
+
+  rooms             Room[]
+  reviews           Review[]
+  bookings          Booking[]
+  subscriptions     Subscription[]
+  featuredListings  FeaturedListing[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  status String @default("PENDING") // PENDING, APPROVED, REJECTED
+
+  // Indexes for better query performance
+  @@index([city])
+  @@index([rating])
+  @@index([price])
+  @@index([status])
+}
+
+model Room {
+  id        String   @id @default(cuid())
+  type      String // e.g. "Deluxe Suite"
+  price     Int
+  capacity  Int      @default(2)
+  hotelId   String
+  hotel     Hotel    @relation(fields: [hotelId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+// 3. Booking System (The Money Maker)
+model Booking {
+  id      String @id @default(cuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id])
+  hotelId String
+  hotel   Hotel  @relation(fields: [hotelId], references: [id])
+
+  checkIn    DateTime
+  checkOut   DateTime
+  totalPrice Int
+  status     String @default("CONFIRMED") // PENDING, CONFIRMED, CANCELLED, COMPLETED
+
+  paymentId String? // Stripe/Razorpay Payment ID
+
+  // Stripe payment tracking
+  paymentIntentId  String? @unique
+  paymentStatus    String  @default("pending") // pending, succeeded, failed, refunded
+  stripeCustomerId String?
+
+  commission Commission?
+
+  createdAt DateTime @default(now())
+
+  // Indexes for better query performance
+  @@index([userId])
+  @@index([status])
+  @@index([paymentIntentId])
+  @@index([paymentStatus])
+}
+
+// 4. Enhanced Review System (Social Proof)
+model Review {
+  id        String   @id @default(cuid())
+  
+  // Overall rating (1-5)
+  overallRating    Int
+  
+  // Category ratings (1-5 each)
+  cleanliness      Int
+  sleepQuality     Int
+  staffExperience  Int
+  luxuryValue      Int
+  
+  // Traveler context
+  travelerType     String // Business, Couples, LongStay, Solo, Family
+  
+  // Written review
+  comment   String?
+  
+  // Verification
+  verified  Boolean  @default(false) // Only from confirmed bookings
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  hotelId   String
+  hotel     Hotel    @relation(fields: [hotelId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+// --- MONETIZATION MODELS ---
+
+// Subscription Model for Hotel Premium Features
+model Subscription {
+  id        String           @id @default(cuid())
+  hotelId   String
+  hotel     Hotel            @relation(fields: [hotelId], references: [id])
+  tier      String           @default("FREE")// FREE, SILVER, GOLD, PLATINUM
+  startDate DateTime
+  endDate   DateTime
+  active    Boolean          @default(true)
+  price     Int              // Monthly price paid
+  createdAt DateTime         @default(now())
+
+  @@index([hotelId])
+  @@index([active])
+}
+
+// Commission Tracking for Bookings
+model Commission {
+  id               String       @id @default(cuid())
+  bookingId        String       @unique
+  booking          Booking      @relation(fields: [bookingId], references: [id])
+  commissionRate   Float        // percentage (e.g., 12.5 for 12.5%)
+  commissionAmount Int          // calculated commission in currency
+  platformFee      Int          // convenience fee
+  hotelPayout      Int          // amount hotel receives
+  status           String       @default("PENDING") // PENDING, PAID, FAILED
+  paidAt           DateTime?
+  createdAt        DateTime     @default(now())
+
+  @@index([status])
+  @@index([bookingId])
+}
+
+// Featured Listings for Homepage Promotions
+model FeaturedListing {
+  id        String   @id @default(cuid())
+  hotelId   String
+  hotel     Hotel    @relation(fields: [hotelId], references: [id])
+  city      String   // Restrict to 5 per city
+  position  Int      // 1-5 for city slots
+  startDate DateTime
+  endDate   DateTime
+  active    Boolean  @default(true)
+  price     Int      // One-time or recurring fee
+  reason    String   // Transparency: "Top-rated in Goa", "Editor's Pick"
+  createdAt DateTime @default(now())
+
+  @@index([city, active])
+  @@index([hotelId])
+  @@index([position])
+}
+
+// --- NextAuth Boilerplate (Required for Login) ---
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}

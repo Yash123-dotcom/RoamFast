@@ -1,0 +1,422 @@
+@import "tailwindcss";
+@plugin "tailwindcss-animate";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  /* --- NEO LUX PALETTE --- */
+  --color-void: #000000;
+  --color-void-light: #030712;
+  /* Deep Space Blue */
+  --color-gold: #F59E0B;
+  --color-gold-dim: #925c00;
+  --color-electric: #FFD700;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+
+  /* --- CINEMATIC ANIMATIONS --- */
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-aurora: aurora 20s linear infinite;
+  --animate-glow-pulse: glowPulse 3s ease-in-out infinite;
+  --animate-spotlight: spotlight 2s ease-in-out infinite alternate;
+
+  @keyframes float {
+
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+
+    50% {
+      transform: translateY(-20px);
+    }
+  }
+
+  @keyframes aurora {
+    0% {
+      background-position: 50% 50%, 50% 50%;
+    }
+
+    100% {
+      background-position: 350% 50%, 350% 50%;
+    }
+  }
+
+  @keyframes glowPulse {
+
+    0%,
+    100% {
+      opacity: 0.5;
+      box-shadow: 0 0 10px var(--color-gold-dim);
+    }
+
+    50% {
+      opacity: 1;
+      box-shadow: 0 0 30px var(--color-electric);
+    }
+  }
+}
+
+/* --- GLOBAL RESETS & TYPOGRAPHY --- */
+@layer base {
+  :root {
+    --background: 0 0% 0%;
+    /* Absolute Void Black */
+    --foreground: 45 100% 96%;
+    /* Off-white Gold Tint */
+
+    --card: 222 47% 4%;
+    /* Very dark blue-black */
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 4%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 45 93% 47%;
+    /* Electric Gold */
+    --primary-foreground: 0 0% 9%;
+
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217 33% 12%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 45 93% 47%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 33% 12%;
+    --input: 217 33% 12%;
+    --ring: 45 93% 47%;
+
+    --radius: 0.75rem;
+
+    --font-heading: 'Space Grotesk', sans-serif;
+    --font-body: 'Manrope', sans-serif;
+  }
+
+  body {
+    @apply bg-black text-white antialiased selection:bg-amber-500/40 selection:text-white;
+    font-family: var(--font-body);
+    overflow-x: hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading);
+    @apply tracking-tight font-bold;
+  }
+}
+
+/* --- NEO LUX UTILITIES --- */
+
+/* 1. Glassmorphism: "Obsidian Glass" */
+.glass-neo {
+  @apply bg-black/40 backdrop-blur-2xl border border-white/5 shadow-2xl;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+}
+
+.glass-panel {
+  @apply bg-[#030712]/60 backdrop-blur-xl border border-white/10;
+}
+
+/* 2. Text Effects */
+.text-gradient-neo {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-[#FFD700] via-[#F59E0B] to-[#D4AF37];
+  text-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
+}
+
+.text-glow {
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+}
+
+/* 3. Neo Components */
+.btn-magnetic {
+  @apply relative overflow-hidden transition-all duration-300 ease-out;
+}
+
+.btn-magnetic::after {
+  content: '';
+  @apply absolute inset-0 bg-white/20 opacity-0 transition-opacity duration-300;
+}
+
+.btn-magnetic:hover::after {
+  @apply opacity-100;
+}
+
+/* 4. Backgrounds */
+.bg-aurora {
+  background-image:
+    radial-gradient(at 0% 0%, hsla(253, 16%, 7%, 1) 0, transparent 50%),
+    radial-gradient(at 50% 0%, hsla(225, 39%, 30%, 1) 0, transparent 50%),
+    radial-gradient(at 100% 0%, hsla(339, 49%, 30%, 1) 0, transparent 50%);
+}
+
+.bg-void-grid {
+  background-size: 50px 50px;
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+}
+
+.animate-enter {
+  animation: enter 0.8s ease-out forwards;
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+@keyframes enter {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- PREMIUM ENHANCEMENTS FOR HOTEL MANAGERS --- */
+
+/* Shimmer Effect for Premium Elements */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  animation: shimmer 3s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    left: -100%;
+  }
+
+  100% {
+    left: 100%;
+  }
+}
+
+/* Premium Gradient Text */
+.text-premium-gold {
+  @apply bg-clip-text text-transparent;
+  background-image: linear-gradient(135deg, #FFD700 0%, #FDB931 25%, #F59E0B 50%, #D4AF37 75%, #FFD700 100%);
+  background-size: 200% auto;
+  animation: gradientShift 3s ease infinite;
+}
+
+@keyframes gradientShift {
+
+  0%,
+  100% {
+    background-position: 0% center;
+  }
+
+  50% {
+    background-position: 100% center;
+  }
+}
+
+/* Magnetic Button Effect */
+.btn-magnetic-enhanced {
+  @apply relative overflow-hidden transition-all duration-500 ease-out;
+  transform-style: preserve-3d;
+}
+
+.btn-magnetic-enhanced::before {
+  content: '';
+  @apply absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent;
+  transform: translateX(-100%);
+  transition: transform 0.6s ease;
+}
+
+.btn-magnetic-enhanced:hover::before {
+  transform: translateX(100%);
+}
+
+.btn-magnetic-enhanced:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 40px rgba(245, 158, 11, 0.3);
+}
+
+/* Glow Pulse for CTAs */
+.glow-pulse-strong {
+  animation: strongPulse 2s ease-in-out infinite;
+}
+
+@keyframes strongPulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.5), 0 0 40px rgba(245, 158, 11, 0.3);
+  }
+
+  50% {
+    box-shadow: 0 0 40px rgba(245, 158, 11, 0.8), 0 0 60px rgba(245, 158, 11, 0.5);
+  }
+}
+
+/* Premium Card Hover */
+.card-premium {
+  @apply transition-all duration-500 ease-out;
+  transform-style: preserve-3d;
+}
+
+.card-premium:hover {
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(245, 158, 11, 0.1);
+}
+
+/* Animated Border */
+.border-animated {
+  position: relative;
+  background: linear-gradient(#0f172a, #0f172a) padding-box,
+    linear-gradient(135deg, #F59E0B, #FFD700, #F59E0B) border-box;
+  border: 2px solid transparent;
+  animation: rotateBorder 3s linear infinite;
+}
+
+@keyframes rotateBorder {
+  0% {
+    filter: hue-rotate(0deg);
+  }
+
+  100% {
+    filter: hue-rotate(360deg);
+  }
+}
+
+/* Floating Animation */
+.float-slow {
+  animation: floatSlow 8s ease-in-out infinite;
+}
+
+@keyframes floatSlow {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-30px);
+  }
+}
+
+/* Number Counter Animation */
+.counter-appear {
+  animation: counterAppear 1s ease-out forwards;
+}
+
+@keyframes counterAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.5) translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Spotlight Effect */
+.spotlight {
+  position: relative;
+}
+
+.spotlight::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 200px;
+  background: radial-gradient(ellipse at top, rgba(245, 158, 11, 0.15), transparent);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.spotlight:hover::after {
+  opacity: 1;
+}
+
+/* Trust Badge Shine */
+.trust-badge {
+  @apply relative overflow-hidden;
+}
+
+.trust-badge::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transform: rotate(45deg);
+  animation: badgeShine 5s infinite;
+}
+
+@keyframes badgeShine {
+  0% {
+    transform: translateX(-100%) rotate(45deg);
+  }
+
+  100% {
+    transform: translateX(100%) rotate(45deg);
+  }
+}
+
+/* Premium Gradient Backgrounds */
+.bg-premium-dark {
+  background: linear-gradient(135deg, #0a0e1a 0%, #1a1f35 50%, #0a0e1a 100%);
+}
+
+.bg-premium-gold {
+  background: linear-gradient(135deg, #F59E0B 0%, #FFD700 50%, #F59E0B 100%);
+}
+
+/* Fade in from Bottom */
+.fade-in-up {
+  animation: fadeInUp 0.8s ease-out forwards;
+  opacity: 0;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Scale on Hover */
+.scale-on-hover {
+  @apply transition-transform duration-300 ease-out;
+}
+
+.scale-on-hover:hover {
+  transform: scale(1.05);
+}
