@@ -1,23 +1,65 @@
 import admin from 'firebase-admin';
 
-// Initialize Firebase Admin SDK
-// For development, you can use a service account key file
-// For production, use environment variables or default credentials
-if (!admin.apps.length) {
-    // Option 1: Use service account key file (for development)
-    // Uncomment and provide path to your service account JSON
-    // const serviceAccount = require('path/to/serviceAccountKey.json');
-    // admin.initializeApp({
-    //   credential: admin.credential.cert(serviceAccount),
-    // });
+/**
+ * Parse the Firebase private key from environment variable.
+ * Handles multiple formats:
+ * - Keys with literal \n characters (from .env files)
+ * - Keys with escaped \\n characters
+ * - Keys wrapped in quotes
+ * - Base64 encoded keys
+ */
+function parsePrivateKey(key: string | undefined): string | undefined {
+    if (!key || key === 'your-private-key') {
+        return undefined;
+    }
 
-    // Option 2: Use environment variables (recommended for production)
-    // Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
+    let parsedKey = key;
+
+    // Remove surrounding quotes if present
+    if ((parsedKey.startsWith('"') && parsedKey.endsWith('"')) ||
+        (parsedKey.startsWith("'") && parsedKey.endsWith("'"))) {
+        parsedKey = parsedKey.slice(1, -1);
+    }
+
+    // Check if it's base64 encoded (no spaces, no dashes at start)
+    if (!parsedKey.includes('-----') && !parsedKey.includes(' ')) {
+        try {
+            const decoded = Buffer.from(parsedKey, 'base64').toString('utf-8');
+            if (decoded.includes('-----BEGIN')) {
+                parsedKey = decoded;
+            }
+        } catch {
+            // Not base64, continue with original
+        }
+    }
+
+    // Replace escaped newlines with actual newlines
+    // Handle both \\n (double escaped) and \n (single escaped as literal)
+    parsedKey = parsedKey
+        .replace(/\\\\n/g, '\n')  // \\n -> \n
+        .replace(/\\n/g, '\n');    // \n -> newline
+
+    // Ensure proper PEM format
+    if (!parsedKey.includes('-----BEGIN')) {
+        console.error('Private key is missing BEGIN header');
+        return undefined;
+    }
+
+    if (!parsedKey.includes('-----END')) {
+        console.error('Private key is missing END footer');
+        return undefined;
+    }
+
+    return parsedKey;
+}
+
+// Initialize Firebase Admin SDK
+if (!admin.apps.length) {
     const projectId = process.env.FIREBASE_PROJECT_ID;
     const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+    const privateKey = parsePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
 
-    if (projectId && clientEmail && privateKey && privateKey !== "your-private-key") {
+    if (projectId && clientEmail && privateKey) {
         try {
             admin.initializeApp({
                 credential: admin.credential.cert({
@@ -26,20 +68,24 @@ if (!admin.apps.length) {
                     privateKey,
                 }),
             });
-            console.log('Firebase Admin initialized with credentials');
+            console.log('✓ Firebase Admin initialized with credentials');
         } catch (error) {
-            console.warn('Failed to initialize Firebase Admin with credentials, falling back to default:', error);
-            try { admin.initializeApp(); } catch (e) { console.error('Firebase default init failed:', e); }
+            console.error('✗ Failed to initialize Firebase Admin:', error);
+            // Try default initialization
+            try {
+                admin.initializeApp();
+                console.log('✓ Firebase Admin initialized with default credentials');
+            } catch (e) {
+                console.error('✗ Firebase default init also failed:', e);
+            }
         }
     } else {
-        // Option 3: Use default credentials (for Cloud environments) or Mock for local
+        // Use default credentials (for Cloud environments)
         try {
-            if (admin.apps.length === 0) {
-                admin.initializeApp();
-                console.log('Firebase Admin initialized with default credentials');
-            }
+            admin.initializeApp();
+            console.log('✓ Firebase Admin initialized with default credentials');
         } catch (error) {
-            console.warn('Firebase Admin default initialization failed. This is expected if no credentials are provided locally.', error);
+            console.warn('⚠ Firebase Admin initialization skipped - no credentials provided');
         }
     }
 }
@@ -47,3 +93,4 @@ if (!admin.apps.length) {
 export const db = admin.firestore();
 export const auth = admin.auth();
 export { admin };
+

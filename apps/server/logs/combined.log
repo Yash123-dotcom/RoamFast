@@ -615,3 +615,15 @@
 {"level":"info","message":"🚀 Server running on http://localhost:3001","timestamp":"2026-01-30 01:16:39"}
 {"level":"info","message":"Environment: development","timestamp":"2026-01-30 01:16:39"}
 {"level":"info","message":"API Version: v1","timestamp":"2026-01-30 01:16:39"}
+{"level":"debug","message":"Logger initialized in development mode","timestamp":"2026-01-31 01:15:26"}
+{"level":"info","message":"🚀 Server running on http://localhost:3001","timestamp":"2026-01-31 01:15:27"}
+{"level":"info","message":"Environment: development","timestamp":"2026-01-31 01:15:27"}
+{"level":"info","message":"API Version: v1","timestamp":"2026-01-31 01:15:27"}
+{"level":"debug","message":"Logger initialized in development mode","timestamp":"2026-01-31 01:18:25"}
+{"level":"info","message":"🚀 Server running on http://localhost:3001","timestamp":"2026-01-31 01:18:25"}
+{"level":"info","message":"Environment: development","timestamp":"2026-01-31 01:18:25"}
+{"level":"info","message":"API Version: v1","timestamp":"2026-01-31 01:18:25"}
+{"level":"debug","message":"Logger initialized in development mode","timestamp":"2026-01-31 01:27:53"}
+{"level":"info","message":"🚀 Server running on http://localhost:3001","timestamp":"2026-01-31 01:27:54"}
+{"level":"info","message":"Environment: development","timestamp":"2026-01-31 01:27:54"}
+{"level":"info","message":"API Version: v1","timestamp":"2026-01-31 01:27:54"}
