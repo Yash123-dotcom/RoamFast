@@ -1,4 +1,4 @@
-import { prisma } from '@repo/database';
+import { db } from '@/config/firebase';
 import { PayoutStatus, SubscriptionTier } from '@/constants/enums';
 // Commission rates based on subscription tier
 const COMMISSION_RATES = {
@@ -10,26 +10,25 @@ const COMMISSION_RATES = {
 // Platform convenience fee
 const PLATFORM_FEE = 299; // ₹299 per booking
 export class CommissionService {
+    constructor() {
+        this.collection = db.collection('commissions');
+    }
     /**
      * Calculate commission based on booking amount and hotel's subscription tier
      */
     async calculateCommission(bookingAmount, hotelId) {
         // Get hotel's active subscription
-        const subscription = await prisma.subscription.findFirst({
-            where: {
-                hotelId,
-                active: true,
-                endDate: {
-                    gte: new Date(), // Still active
-                },
-            },
-            orderBy: {
-                createdAt: 'desc',
-            },
-        });
+        const subscriptionSnapshot = await db.collection('subscriptions')
+            .where('hotelId', '==', hotelId)
+            .where('active', '==', true)
+            .where('endDate', '>=', new Date())
+            .orderBy('createdAt', 'desc')
+            .limit(1)
+            .get();
         // Default to FREE tier if no subscription
-        // Default to FREE tier if no subscription
-        const tier = subscription?.tier || SubscriptionTier.FREE;
+        const tier = subscriptionSnapshot.empty
+            ? SubscriptionTier.FREE
+            : subscriptionSnapshot.docs[0].data().tier;
         const commissionRate = COMMISSION_RATES[tier];
         // Calculate amounts
         const commissionAmount = Math.round((bookingAmount * commissionRate) / 100);
@@ -49,73 +48,88 @@ export class CommissionService {
      */
     async recordCommission(bookingId, hotelId, bookingAmount) {
         const calculation = await this.calculateCommission(bookingAmount, hotelId);
-        await prisma.commission.create({
-            data: {
-                bookingId,
-                commissionRate: calculation.commissionRate,
-                commissionAmount: calculation.commissionAmount,
-                platformFee: calculation.platformFee,
-                hotelPayout: calculation.hotelPayout,
-                status: PayoutStatus.PENDING,
-            },
+        await this.collection.add({
+            bookingId,
+            commissionRate: calculation.commissionRate,
+            commissionAmount: calculation.commissionAmount,
+            platformFee: calculation.platformFee,
+            hotelPayout: calculation.hotelPayout,
+            status: PayoutStatus.PENDING,
+            createdAt: new Date(),
         });
     }
     /**
      * Get total pending commissions for a date range
      */
     async getPendingCommissions(startDate, endDate) {
-        const where = { status: PayoutStatus.PENDING };
-        if (startDate || endDate) {
-            where.createdAt = {};
-            if (startDate)
-                where.createdAt.gte = startDate;
-            if (endDate)
-                where.createdAt.lte = endDate;
+        let query = this.collection.where('status', '==', PayoutStatus.PENDING);
+        if (startDate) {
+            query = query.where('createdAt', '>=', startDate);
         }
-        const result = await prisma.commission.aggregate({
-            where,
-            _sum: {
-                commissionAmount: true,
-                platformFee: true,
-            },
+        if (endDate) {
+            query = query.where('createdAt', '<=', endDate);
+        }
+        const snapshot = await query.get();
+        let total = 0;
+        snapshot.docs.forEach(doc => {
+            const data = doc.data();
+            total += (data.commissionAmount || 0) + (data.platformFee || 0);
         });
-        return ((result._sum.commissionAmount || 0) + (result._sum.platformFee || 0));
+        return total;
     }
     /**
      * Generate payout report for a hotel
      */
     async generatePayoutReport(hotelId, startDate, endDate) {
-        const commissions = await prisma.commission.findMany({
-            where: {
-                booking: {
-                    hotelId,
-                },
-                createdAt: {
-                    gte: startDate,
-                    lte: endDate,
-                },
-            },
-            include: {
-                booking: {
-                    select: {
-                        id: true,
-                        totalPrice: true,
-                        checkIn: true,
-                        checkOut: true,
-                        user: {
-                            select: {
-                                name: true,
-                                email: true,
-                            },
-                        },
-                    },
-                },
-            },
-        });
+        // Get all bookings for the hotel in the date range
+        const bookingsSnapshot = await db.collection('bookings')
+            .where('hotelId', '==', hotelId)
+            .where('createdAt', '>=', startDate)
+            .where('createdAt', '<=', endDate)
+            .get();
+        const bookingIds = bookingsSnapshot.docs.map(doc => doc.id);
+        if (bookingIds.length === 0) {
+            return {
+                totalBookings: 0,
+                totalRevenue: 0,
+                totalCommission: 0,
+                totalPayout: 0,
+                commissions: [],
+            };
+        }
+        // Get commissions for these bookings
+        const allCommissionsSnapshot = await this.collection.get();
+        const commissions = [];
+        for (const commDoc of allCommissionsSnapshot.docs) {
+            const commData = commDoc.data();
+            if (bookingIds.includes(commData.bookingId)) {
+                const bookingDoc = await db.collection('bookings').doc(commData.bookingId).get();
+                const bookingData = bookingDoc.exists ? bookingDoc.data() : null;
+                let user = null;
+                if (bookingData?.userId) {
+                    const userDoc = await db.collection('users').doc(bookingData.userId).get();
+                    if (userDoc.exists) {
+                        const userData = userDoc.data();
+                        user = { name: userData?.name, email: userData?.email };
+                    }
+                }
+                commissions.push({
+                    id: commDoc.id,
+                    ...commData,
+                    booking: bookingData ? {
+                        id: bookingDoc.id,
+                        totalPrice: bookingData.totalPrice,
+                        checkIn: bookingData.checkIn,
+                        checkOut: bookingData.checkOut,
+                        user,
+                    } : null,
+                });
+            }
+        }
         const totalBookings = commissions.length;
-        const totalRevenue = commissions.reduce((sum, c) => sum + c.booking.totalPrice, 0);
-        const totalCommission = commissions.reduce((sum, c) => sum + c.commissionAmount + c.platformFee, 0);
-        const totalPayout = commissions.reduce((sum, c) => sum + c.hotelPayout, 0);
+        const totalRevenue = commissions.reduce((sum, c) => sum + (c.booking?.totalPrice || 0), 0);
+        const totalCommission = commissions.reduce((sum, c) => sum + (c.commissionAmount || 0) + (c.platformFee || 0), 0);
+        const totalPayout = commissions.reduce((sum, c) => sum + (c.hotelPayout || 0), 0);
         return {
             totalBookings,
             totalRevenue,
@@ -128,12 +142,9 @@ export class CommissionService {
      * Mark commission as paid
      */
     async markAsPaid(commissionId) {
-        await prisma.commission.update({
-            where: { id: commissionId },
-            data: {
-                status: PayoutStatus.PAID,
-                paidAt: new Date(),
-            },
+        await this.collection.doc(commissionId).update({
+            status: PayoutStatus.PAID,
+            paidAt: new Date(),
         });
     }
 }

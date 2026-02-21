@@ -1,21 +1,36 @@
+import { auth } from '@/config/firebase';
 import { UnauthorizedError } from '@/utils/errors';
+import { logger } from '@/utils/logger';
 /**
  * Authentication middleware
- * TODO: Implement proper JWT or session-based authentication
- * For now, this is a placeholder that checks for a user ID in headers
+ * Verifies Firebase ID Token
  */
-export const requireAuth = (req, res, next) => {
-    const userId = req.headers['x-user-id'];
-    if (!userId) {
-        throw new UnauthorizedError('Authentication required');
+export const requireAuth = async (req, res, next) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            throw new UnauthorizedError('Authentication required');
+        }
+        const token = authHeader.split('Bearer ')[1];
+        try {
+            const decodedToken = await auth.verifyIdToken(token);
+            // Attach user info to request
+            // We map Firebase UID to id, and custom claims to role if present
+            req.user = {
+                id: decodedToken.uid,
+                email: decodedToken.email || '',
+                role: decodedToken.role || 'USER',
+            };
+            next();
+        }
+        catch (error) {
+            logger.error('Token verification failed:', error);
+            throw new UnauthorizedError('Invalid or expired token');
+        }
     }
-    // Attach user info to request
-    req.user = {
-        id: userId,
-        email: 'user@example.com', // TODO: Fetch from database or session
-        role: 'USER',
-    };
-    next();
+    catch (error) {
+        next(error);
+    }
 };
 /**
  * Role-based access control middleware

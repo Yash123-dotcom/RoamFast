@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { Loader2, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
+import Image from 'next/image';
 
 export default function SignUpPage() {
     const { signInWithGoogle } = useAuth();
@@ -94,10 +95,13 @@ export default function SignUpPage() {
                 {/* Left Side: Visuals (Hidden on mobile) */}
                 <div className="hidden lg:block w-1/2 relative overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-r from-black/50 to-transparent z-10" />
-                    <img
+                    <Image
                         src="https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80"
                         alt="Luxury Hotel Pool"
-                        className="w-full h-full object-cover"
+                        fill
+                        className="object-cover"
+                        sizes="50vw"
+                        priority
                     />
                     <div className="absolute bottom-12 left-12 z-20 max-w-md">
                         <blockquote className="text-3xl font-heading font-bold text-white mb-4">

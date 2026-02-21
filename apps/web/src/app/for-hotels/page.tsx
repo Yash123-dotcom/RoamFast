@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import Navbar from '@/components/layout/Navbar';
+import Image from 'next/image';
 import Footer from '@/components/layout/Footer';
 import { Button } from '@/components/ui/button';
 import AnimatedCounter from '@/components/ui/AnimatedCounter';
@@ -101,10 +102,12 @@ export default function ForHotelsPage() {
                             className="relative"
                         >
                             <div className="relative rounded-[32px] overflow-hidden border border-white/10 shadow-2xl">
-                                <img
+                                <Image
                                     src="https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?q=80&w=2070"
                                     alt="Luxury Hotel"
-                                    className="w-full h-[500px] object-cover"
+                                    fill
+                                    sizes="(max-width: 1024px) 100vw, 50vw"
+                                    className="object-cover"
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
 

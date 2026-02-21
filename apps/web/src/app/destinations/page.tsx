@@ -3,6 +3,7 @@
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import { motion } from 'framer-motion';
+import Image from 'next/image';
 import Link from 'next/link';
 
 const destinations = [
@@ -53,10 +54,12 @@ export default function DestinationsPage() {
                                             }`}
                                     >
                                         <div className="absolute inset-0 bg-black/20 group-hover:bg-black/0 transition-colors z-10" />
-                                        <img
+                                        <Image
                                             src={dest.image}
                                             alt={dest.city}
-                                            className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 grayscale-[30%] group-hover:grayscale-0"
+                                            fill
+                                            sizes={i === 0 ? "(max-width: 768px) 100vw, 50vw" : "(max-width: 768px) 50vw, 25vw"}
+                                            className="object-cover transition-transform duration-700 group-hover:scale-110 grayscale-[30%] group-hover:grayscale-0"
                                         />
 
                                         <div className="absolute inset-0 p-6 flex flex-col justify-end z-20 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-90">

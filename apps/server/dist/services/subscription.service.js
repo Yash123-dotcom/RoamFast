@@ -1,4 +1,4 @@
-import { prisma } from '@repo/database';
+import { db } from '@/config/firebase';
 import { SubscriptionTier } from '@/constants/enums';
 // Subscription pricing (monthly in ₹)
 const SUBSCRIPTION_PRICES = {
@@ -8,6 +8,9 @@ const SUBSCRIPTION_PRICES = {
     PLATINUM: 15000,
 };
 export class SubscriptionService {
+    constructor() {
+        this.collection = db.collection('subscriptions');
+    }
     /**
      * Create a new subscription for a hotel
      */
@@ -17,61 +20,73 @@ export class SubscriptionService {
         const endDate = new Date();
         endDate.setMonth(endDate.getMonth() + durationMonths);
         // Deactivate any existing subscriptions
-        await prisma.subscription.updateMany({
-            where: { hotelId, active: true },
-            data: { active: false },
+        const existingSubscriptions = await this.collection
+            .where('hotelId', '==', hotelId)
+            .where('active', '==', true)
+            .get();
+        const batch = db.batch();
+        existingSubscriptions.docs.forEach(doc => {
+            batch.update(doc.ref, { active: false });
         });
-        return await prisma.subscription.create({
-            data: {
-                hotelId,
-                tier,
-                startDate,
-                endDate,
-                price: price * durationMonths,
-                active: true,
-            },
-        });
+        await batch.commit();
+        // Create new subscription
+        const subscriptionData = {
+            hotelId,
+            tier,
+            startDate,
+            endDate,
+            price: price * durationMonths,
+            active: true,
+            createdAt: new Date(),
+        };
+        const docRef = await this.collection.add(subscriptionData);
+        const created = await docRef.get();
+        return {
+            id: created.id,
+            ...created.data(),
+        };
     }
     /**
      * Upgrade subscription to a higher tier
      */
     async upgradeSubscription(subscriptionId, newTier) {
-        const subscription = await prisma.subscription.findUnique({
-            where: { id: subscriptionId },
-        });
-        if (!subscription) {
+        const subscriptionDoc = await this.collection.doc(subscriptionId).get();
+        if (!subscriptionDoc.exists) {
             throw new Error('Subscription not found');
         }
-        // Calculate prorated price difference
-        // Calculate prorated price difference
-        const oldPrice = SUBSCRIPTION_PRICES[subscription.tier];
+        const subscriptionData = subscriptionDoc.data();
+        const oldPrice = SUBSCRIPTION_PRICES[subscriptionData?.tier];
         const newPrice = SUBSCRIPTION_PRICES[newTier];
         const priceDifference = newPrice - oldPrice;
-        // Update the subscription
-        return await prisma.subscription.update({
-            where: { id: subscriptionId },
-            data: {
-                tier: newTier,
-                price: subscription.price + priceDifference,
-            },
+        await this.collection.doc(subscriptionId).update({
+            tier: newTier,
+            price: (subscriptionData?.price || 0) + priceDifference,
         });
+        const updated = await this.collection.doc(subscriptionId).get();
+        return {
+            id: updated.id,
+            ...updated.data(),
+        };
     }
     /**
      * Check if a hotel has an active subscription
      */
     async getActiveSubscription(hotelId) {
-        return await prisma.subscription.findFirst({
-            where: {
-                hotelId,
-                active: true,
-                endDate: {
-                    gte: new Date(),
-                },
-            },
-            orderBy: {
-                createdAt: 'desc',
-            },
-        });
+        const snapshot = await this.collection
+            .where('hotelId', '==', hotelId)
+            .where('active', '==', true)
+            .where('endDate', '>=', new Date())
+            .orderBy('createdAt', 'desc')
+            .limit(1)
+            .get();
+        if (snapshot.empty) {
+            return null;
+        }
+        const doc = snapshot.docs[0];
+        return {
+            id: doc.id,
+            ...doc.data(),
+        };
     }
     /**
      * Get subscription tier for a hotel (defaults to FREE)
@@ -114,66 +129,81 @@ export class SubscriptionService {
     async checkExpiringSubscriptions() {
         const thirtyDaysFromNow = new Date();
         thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-        return await prisma.subscription.findMany({
-            where: {
-                active: true,
-                endDate: {
-                    lte: thirtyDaysFromNow,
-                    gte: new Date(),
-                },
-            },
-            include: {
+        const snapshot = await this.collection
+            .where('active', '==', true)
+            .where('endDate', '<=', thirtyDaysFromNow)
+            .where('endDate', '>=', new Date())
+            .get();
+        const subscriptions = await Promise.all(snapshot.docs.map(async (doc) => {
+            const subData = doc.data();
+            const hotelDoc = await db.collection('hotels').doc(subData.hotelId).get();
+            const hotelData = hotelDoc.exists ? hotelDoc.data() : null;
+            let owner = null;
+            if (hotelData?.ownerId) {
+                const ownerDoc = await db.collection('users').doc(hotelData.ownerId).get();
+                owner = ownerDoc.exists ? ownerDoc.data() : null;
+            }
+            return {
+                id: doc.id,
+                ...subData,
                 hotel: {
-                    include: {
-                        owner: true,
-                    },
+                    id: hotelDoc.id,
+                    ...hotelData,
+                    owner,
                 },
-            },
-        });
+            };
+        }));
+        return subscriptions;
     }
     /**
      * Renew subscription
      */
     async renewSubscription(subscriptionId, durationMonths = 1) {
-        const subscription = await prisma.subscription.findUnique({
-            where: { id: subscriptionId },
-        });
-        if (!subscription) {
+        const subscriptionDoc = await this.collection.doc(subscriptionId).get();
+        if (!subscriptionDoc.exists) {
             throw new Error('Subscription not found');
         }
-        const newEndDate = new Date(subscription.endDate);
+        const subscriptionData = subscriptionDoc.data();
+        const newEndDate = new Date(subscriptionData?.endDate);
         newEndDate.setMonth(newEndDate.getMonth() + durationMonths);
-        const price = SUBSCRIPTION_PRICES[subscription.tier];
-        return await prisma.subscription.update({
-            where: { id: subscriptionId },
-            data: {
-                endDate: newEndDate,
-                price: subscription.price + price * durationMonths,
-            },
+        const price = SUBSCRIPTION_PRICES[subscriptionData?.tier];
+        await this.collection.doc(subscriptionId).update({
+            endDate: newEndDate,
+            price: (subscriptionData?.price || 0) + price * durationMonths,
         });
+        const updated = await this.collection.doc(subscriptionId).get();
+        return {
+            id: updated.id,
+            ...updated.data(),
+        };
     }
     /**
      * Get subscription analytics for platform
      */
     async getSubscriptionAnalytics() {
-        const subscriptions = await prisma.subscription.findMany({
-            where: {
-                active: true,
-                endDate: {
-                    gte: new Date(),
-                },
-            },
+        const snapshot = await this.collection
+            .where('active', '==', true)
+            .where('endDate', '>=', new Date())
+            .get();
+        let totalRevenue = 0;
+        const tierDistribution = {
+            FREE: 0,
+            SILVER: 0,
+            GOLD: 0,
+            PLATINUM: 0,
+        };
+        snapshot.docs.forEach(doc => {
+            const data = doc.data();
+            totalRevenue += data.price || 0;
+            const tier = data.tier;
+            if (tier in tierDistribution) {
+                tierDistribution[tier]++;
+            }
         });
-        const totalRevenue = subscriptions.reduce((sum, sub) => sum + sub.price, 0);
-        const tierDistribution = subscriptions.reduce((acc, sub) => {
-            const tier = sub.tier;
-            acc[tier] = (acc[tier] || 0) + 1;
-            return acc;
-        }, {});
         return {
             totalRevenue,
             tierDistribution,
-            activeSubscriptions: subscriptions.length,
+            activeSubscriptions: snapshot.size,
         };
     }
 }

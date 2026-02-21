@@ -53,12 +53,11 @@
     0%,
     100% {
       opacity: 0.5;
-      box-shadow: 0 0 10px var(--color-gold-dim);
+      /* removed box-shadow, handled by pseudo elements now */
     }
 
     50% {
       opacity: 1;
-      box-shadow: 0 0 30px var(--color-electric);
     }
   }
 }
@@ -255,20 +254,32 @@
   box-shadow: 0 10px 40px rgba(245, 158, 11, 0.3);
 }
 
-/* Glow Pulse for CTAs */
+/* Glow Pulse for CTAs (Refactored for GPU) */
 .glow-pulse-strong {
-  animation: strongPulse 2s ease-in-out infinite;
+  position: relative;
 }
 
-@keyframes strongPulse {
+.glow-pulse-strong::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  z-index: -1;
+  background: transparent;
+  box-shadow: 0 0 40px rgba(245, 158, 11, 0.8), 0 0 60px rgba(245, 158, 11, 0.5);
+  animation: strongPulseOpacity 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes strongPulseOpacity {
 
   0%,
   100% {
-    box-shadow: 0 0 20px rgba(245, 158, 11, 0.5), 0 0 40px rgba(245, 158, 11, 0.3);
+    opacity: 0.3;
   }
 
   50% {
-    box-shadow: 0 0 40px rgba(245, 158, 11, 0.8), 0 0 60px rgba(245, 158, 11, 0.5);
+    opacity: 1;
   }
 }
 

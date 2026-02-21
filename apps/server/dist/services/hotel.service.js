@@ -1,10 +1,13 @@
-import { prisma } from '@repo/database';
+import { db } from '@/config/firebase';
 import { NotFoundError } from '@/utils/errors';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/config/constants';
 /**
- * Hotel Service - Data access layer for hotels
+ * Hotel Service - Data access layer for hotels using Firestore
  */
 export class HotelService {
+    constructor() {
+        this.collection = db.collection('hotels');
+    }
     /**
      * Search hotels by city or name with pagination
      */
@@ -12,51 +15,51 @@ export class HotelService {
         const page = options.page || 1;
         const limit = Math.min(options.limit || DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
         const skip = (page - 1) * limit;
-        const whereClause = {};
+        let hotelQuery = this.collection.where('status', '==', 'APPROVED');
+        // City or name search
         if (query) {
-            whereClause.OR = [
-                { city: { contains: query } },
-                { name: { contains: query } },
-            ];
+            // Firestore doesn't support OR queries directly, so we'll do client-side filtering
+            // Or create separate queries for city and name
+            hotelQuery = hotelQuery.where('city', '>=', query).where('city', '<=', query + '\uf8ff');
         }
-        // Price Filter
-        if (options.minPrice !== undefined || options.maxPrice !== undefined) {
-            whereClause.price = {};
-            if (options.minPrice !== undefined)
-                whereClause.price.gte = options.minPrice;
-            if (options.maxPrice !== undefined)
-                whereClause.price.lte = options.maxPrice;
+        // Price filters
+        if (options.minPrice !== undefined) {
+            hotelQuery = hotelQuery.where('price', '>=', options.minPrice);
         }
-        // Amenities Filter - Disabled for SQLite String compatibility
-        // if (options.amenities && options.amenities.length > 0) {
-        //     whereClause.amenities = {
-        //         hasEvery: options.amenities
-        //     };
-        // }
+        if (options.maxPrice !== undefined) {
+            hotelQuery = hotelQuery.where('price', '<=', options.maxPrice);
+        }
         // Sorting
-        let orderBy = { price: 'asc' };
-        if (options.sortBy === 'price_desc')
-            orderBy = { price: 'desc' };
-        if (options.sortBy === 'rating')
-            orderBy = { rating: 'desc' };
-        const [hotels, total] = await Promise.all([
-            prisma.hotel.findMany({
-                where: whereClause,
-                include: { rooms: true },
-                orderBy: orderBy,
-                skip,
-                take: limit,
-            }),
-            prisma.hotel.count({ where: whereClause }),
-        ]);
-        // Parse JSON strings back to arrays
-        const parsedHotels = hotels.map(hotel => ({
-            ...hotel,
-            images: JSON.parse(hotel.images),
-            amenities: JSON.parse(hotel.amenities)
+        if (options.sortBy === 'price_asc') {
+            hotelQuery = hotelQuery.orderBy('price', 'asc');
+        }
+        else if (options.sortBy === 'price_desc') {
+            hotelQuery = hotelQuery.orderBy('price', 'desc');
+        }
+        else if (options.sortBy === 'rating') {
+            hotelQuery = hotelQuery.orderBy('rating', 'desc');
+        }
+        else {
+            hotelQuery = hotelQuery.orderBy('price', 'asc');
+        }
+        // Get all matching documents first (for total count)
+        const snapshot = await hotelQuery.get();
+        const total = snapshot.size;
+        // Apply pagination manually
+        const hotels = snapshot.docs
+            .slice(skip, skip + limit)
+            .map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+        }));
+        // Fetch rooms for each hotel
+        const hotelsWithRooms = await Promise.all(hotels.map(async (hotel) => {
+            const roomsSnapshot = await db.collection('rooms').where('hotelId', '==', hotel.id).get();
+            const rooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            return { ...hotel, rooms };
         }));
         return {
-            data: parsedHotels,
+            data: hotelsWithRooms,
             pagination: {
                 page,
                 limit,
@@ -69,102 +72,106 @@ export class HotelService {
      * Get hotel by ID with relations
      */
     async getHotelById(id) {
-        const hotel = await prisma.hotel.findUnique({
-            where: { id },
-            include: {
-                rooms: true,
-                reviews: {
-                    include: {
-                        user: {
-                            select: {
-                                name: true,
-                                image: true,
-                            },
-                        },
-                    },
-                    orderBy: {
-                        createdAt: 'desc',
-                    },
-                },
-            },
-        });
-        if (!hotel) {
+        const hotelDoc = await this.collection.doc(id).get();
+        if (!hotelDoc.exists) {
             throw new NotFoundError('Hotel not found');
         }
+        const hotel = { id: hotelDoc.id, ...hotelDoc.data() };
+        // Fetch rooms
+        const roomsSnapshot = await db.collection('rooms').where('hotelId', '==', id).get();
+        const rooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Fetch reviews with user data
+        const reviewsSnapshot = await db.collection('reviews')
+            .where('hotelId', '==', id)
+            .orderBy('createdAt', 'desc')
+            .get();
+        const reviews = await Promise.all(reviewsSnapshot.docs.map(async (doc) => {
+            const reviewData = doc.data();
+            const userDoc = await db.collection('users').doc(reviewData.userId).get();
+            const userData = userDoc.exists ? userDoc.data() : null;
+            return {
+                id: doc.id,
+                ...reviewData,
+                user: userData ? { name: userData.name, image: userData.image } : null,
+            };
+        }));
         return {
             ...hotel,
-            images: JSON.parse(hotel.images),
-            amenities: JSON.parse(hotel.amenities)
+            rooms,
+            reviews,
         };
     }
     /**
      * Create a new hotel
      */
     async createHotel(data) {
-        const created = await prisma.hotel.create({
-            data: {
-                ...data,
-                images: JSON.stringify(data.images),
-                amenities: JSON.stringify(data.amenities)
-            },
-            include: { rooms: true },
-        });
+        const hotelData = {
+            ...data,
+            rating: 0,
+            qualityScore: 0,
+            status: 'PENDING',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        };
+        const docRef = await this.collection.add(hotelData);
+        const created = await docRef.get();
         return {
-            ...created,
-            images: JSON.parse(created.images),
-            amenities: JSON.parse(created.amenities)
+            id: created.id,
+            ...created.data(),
+            rooms: [],
         };
     }
+    /**
+     * Update hotel
+     */
     async updateHotel(id, data) {
-        // Verify hotel exists
-        const hotel = await prisma.hotel.findUnique({
-            where: { id }
-        });
-        if (!hotel) {
+        const hotelDoc = await this.collection.doc(id).get();
+        if (!hotelDoc.exists) {
             throw new NotFoundError('Hotel not found');
         }
-        const updateData = { ...data };
-        if (data.images)
-            updateData.images = JSON.stringify(data.images);
-        if (data.amenities)
-            updateData.amenities = JSON.stringify(data.amenities);
-        const updated = await prisma.hotel.update({
-            where: { id },
-            data: updateData,
-            include: { rooms: true } // Return with rooms for consistency
+        await this.collection.doc(id).update({
+            ...data,
+            updatedAt: new Date(),
         });
+        const updated = await this.collection.doc(id).get();
+        // Fetch rooms for consistency
+        const roomsSnapshot = await db.collection('rooms').where('hotelId', '==', id).get();
+        const rooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         return {
-            ...updated,
-            images: JSON.parse(updated.images),
-            amenities: JSON.parse(updated.amenities)
+            id: updated.id,
+            ...updated.data(),
+            rooms,
         };
     }
     /**
      * Get featured listings by city
      */
     async getFeaturedListings(city) {
-        const listings = await prisma.featuredListing.findMany({
-            where: {
-                active: true,
-                ...(city ? { city } : {}),
-                endDate: { gt: new Date() }
-            },
-            include: {
-                hotel: {
-                    include: { rooms: true }
-                }
-            },
-            orderBy: { position: 'asc' },
-            take: 5 // Strict limit per city
-        });
-        return listings.map(listing => ({
-            ...listing,
-            hotel: {
-                ...listing.hotel,
-                images: JSON.parse(listing.hotel.images),
-                amenities: JSON.parse(listing.hotel.amenities)
-            }
+        let query = db.collection('featuredListings')
+            .where('active', '==', true)
+            .where('endDate', '>', new Date());
+        if (city) {
+            query = query.where('city', '==', city);
+        }
+        const snapshot = await query.orderBy('position', 'asc').limit(5).get();
+        const listings = await Promise.all(snapshot.docs.map(async (doc) => {
+            const listingData = doc.data();
+            const hotelDoc = await this.collection.doc(listingData.hotelId).get();
+            const hotelData = hotelDoc.exists ? hotelDoc.data() : null;
+            // Fetch rooms for the hotel
+            const roomsSnapshot = await db.collection('rooms').where('hotelId', '==', listingData.hotelId).get();
+            const rooms = roomsSnapshot.docs.map(roomDoc => ({ id: roomDoc.id, ...roomDoc.data() }));
+            return {
+                id: doc.id,
+                ...listingData,
+                hotel: hotelData ? {
+                    id: hotelDoc.id,
+                    ...hotelData,
+                    rooms,
+                } : null,
+            };
         }));
+        return listings;
     }
 }
 export default new HotelService();

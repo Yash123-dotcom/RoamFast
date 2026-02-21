@@ -65,10 +65,10 @@ export default function QualityScoreBadge({
                                     <div className="w-24 h-2 bg-slate-800 rounded-full overflow-hidden">
                                         <div
                                             className={cn(
-                                                "h-full rounded-full transition-all",
+                                                "h-full rounded-full transition-all w-[var(--score-width)]",
                                                 value >= 90 ? "bg-emerald-500" : value >= 70 ? "bg-amber-500" : "bg-red-500"
                                             )}
-                                            style={{ width: `${value}%` }}
+                                            style={{ '--score-width': `${value}%` } as React.CSSProperties}
                                         />
                                     </div>
                                     <span className="text-white font-bold w-8 text-right">{value}</span>

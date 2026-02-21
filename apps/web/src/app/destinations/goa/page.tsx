@@ -5,6 +5,7 @@ import { MapPin, Clock, Star, Camera, Palmtree, Church, Shield, Waves, ArrowLeft
 import { Button } from '@/components/ui/button';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
+import Image from 'next/image';
 import Link from 'next/link';
 
 const goaAttractions = [
@@ -205,10 +206,12 @@ export default function GoaAttractionsPage() {
                                 >
                                     {/* Image */}
                                     <div className="relative h-56 overflow-hidden">
-                                        <img
+                                        <Image
                                             src={place.image}
                                             alt={place.name}
-                                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                                            fill
+                                            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                            className="object-cover transition-transform duration-700 group-hover:scale-110"
                                         />
                                         <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-black/20 to-transparent" />
 

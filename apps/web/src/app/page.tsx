@@ -6,6 +6,7 @@ import FeaturedDestinations from '@/components/features/home/FeaturedDestination
 import { motion } from 'framer-motion';
 import { ShieldCheck, Percent, Lock, Globe, Sparkles, Key, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import Image from 'next/image';
 import { LAUNCH_CONFIG } from '@/config/launch-city';
 
 export default function Home() {
@@ -161,10 +162,12 @@ export default function Home() {
                      className="relative"
                   >
                      <div className="relative rounded-[32px] overflow-hidden border border-white/10 shadow-2xl">
-                        <img
+                        <Image
                            src="https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?q=80&w=2070"
                            alt="Hotel Partnership"
-                           className="w-full h-[400px] object-cover"
+                           fill
+                           sizes="(max-width: 1024px) 100vw, 50vw"
+                           className="object-cover"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
 

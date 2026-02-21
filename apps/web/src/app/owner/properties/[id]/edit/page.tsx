@@ -156,8 +156,8 @@ export default function EditPropertyPage() {
                 <div className="flex justify-between items-center max-w-3xl mx-auto mb-16 relative">
                     <div className="absolute top-1/2 left-0 w-full h-1 bg-white/10 -z-10 rounded-full" />
                     <div
-                        className="absolute top-1/2 left-0 h-1 bg-accent-gold -z-10 rounded-full transition-all duration-500"
-                        style={{ width: `${((currentStep - 1) / (steps.length - 1)) * 100}%` }}
+                        className="absolute top-1/2 left-0 h-1 bg-accent-gold -z-10 rounded-full transition-all duration-500 w-[var(--step-progress)]"
+                        style={{ '--step-progress': `${((currentStep - 1) / (steps.length - 1)) * 100}%` } as React.CSSProperties}
                     />
 
                     {steps.map((step) => (

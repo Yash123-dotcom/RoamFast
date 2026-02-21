@@ -8,6 +8,7 @@ import { Menu, X, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Logo from '@/components/shared/Logo';
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
 import {
   DropdownMenu,
@@ -85,7 +86,9 @@ export default function Navbar() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="rounded-full w-10 h-10 p-0 border border-white/10 bg-white/5">
                     {user.photoURL ? (
-                      <img src={user.photoURL} alt="User" className="w-full h-full rounded-full object-cover" />
+                      <div className="relative w-full h-full rounded-full overflow-hidden">
+                        <Image src={user.photoURL} alt="User" fill className="object-cover" sizes="40px" />
+                      </div>
                     ) : (
                       <User className="w-5 h-5 text-slate-300" />
                     )}

@@ -2,6 +2,7 @@
 
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
+import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { ArrowUpRight } from 'lucide-react';
 import Link from 'next/link';
@@ -74,10 +75,12 @@ export default function CollectionsPage() {
                                 className="group relative h-[400px] rounded-[32px] overflow-hidden cursor-pointer"
                             >
                                 <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors z-10" />
-                                <img
+                                <Image
                                     src={collection.image}
                                     alt={collection.title}
-                                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                                    fill
+                                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                    className="object-cover transition-transform duration-700 group-hover:scale-110"
                                 />
 
                                 <div className="absolute bottom-0 left-0 p-8 z-20 w-full bg-gradient-to-t from-black/90 to-transparent">

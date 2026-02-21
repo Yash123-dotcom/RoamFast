@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Search, Filter, Star, Wifi, Car, Utensils, Waves } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 
 function SearchContent() {
@@ -162,10 +163,12 @@ function SearchContent() {
                       className="group glass-neo rounded-[24px] overflow-hidden hover:border-accent-gold/50 transition-all hover:shadow-[0_0_40px_-10px_rgba(245,158,11,0.2)]"
                     >
                       <div className="h-64 relative overflow-hidden">
-                        <img
+                        <Image
                           src={hotel.images?.[0] || 'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?q=80&w=2049'}
                           alt={hotel.name}
-                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                          fill
+                          sizes="(max-width: 768px) 100vw, 50vw"
+                          className="object-cover transition-transform duration-700 group-hover:scale-110"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
                         <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-white border border-white/10 flex items-center gap-1">

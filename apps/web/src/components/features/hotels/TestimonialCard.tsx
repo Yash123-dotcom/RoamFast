@@ -47,8 +47,8 @@ export default function TestimonialCard({
                         <Star
                             key={i}
                             className={`w-4 h-4 ${i < rating
-                                    ? 'fill-amber-500 text-amber-500'
-                                    : 'text-slate-600'
+                                ? 'fill-amber-500 text-amber-500'
+                                : 'text-slate-600'
                                 }`}
                         />
                     ))}
@@ -72,10 +72,11 @@ export default function TestimonialCard({
                     <div className="relative">
                         <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 p-[2px]">
                             <div className="w-full h-full rounded-full bg-[#0f172a] flex items-center justify-center overflow-hidden">
-                                <img
+                                <Image
                                     src={image}
                                     alt={name}
-                                    className="w-full h-full object-cover"
+                                    fill
+                                    className="object-cover"
                                 />
                             </div>
                         </div>

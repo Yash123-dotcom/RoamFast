@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import Image from 'next/image';
 
 export default function BookPage() {
     const [date, setDate] = useState<Date | undefined>(new Date());
@@ -23,10 +24,13 @@ export default function BookPage() {
                 {/* Background Video/Image */}
                 <div className="absolute inset-0 z-0">
                     <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/50 to-black z-10" />
-                    <img
+                    <Image
                         src="https://images.unsplash.com/photo-1571896349842-6e53ce41e887?q=80&w=2000"
                         alt="Background"
-                        className="w-full h-full object-cover opacity-60"
+                        fill
+                        sizes="100vw"
+                        priority
+                        className="object-cover opacity-60"
                     />
                 </div>
 

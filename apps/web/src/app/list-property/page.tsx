@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Building2, MapPin, Camera, CreditCard, CheckCircle2, ChevronRight, ChevronLeft, Upload, Star, X, Shield, Lock } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
 
 // Steps configuration
 const steps = [
@@ -16,24 +17,36 @@ const steps = [
     { id: 2, title: 'Location', icon: MapPin },
     { id: 3, title: 'Details & Media', icon: Camera },
     { id: 4, title: 'Subscription', icon: CreditCard },
-    { id: 5, title: 'Review', icon: CheckCircle2 },
+    { id: 5, title: 'Review', icon: CheckCircle2 }
 ];
 
 export default function ListPropertyPage() {
     const router = useRouter();
     const [currentStep, setCurrentStep] = useState(1);
     const [loading, setLoading] = useState(false);
+
+    // Form State
     const [formData, setFormData] = useState({
+        // Step 1
         name: '',
         description: '',
-        type: 'Hotel', // Hotel, Villa, Resort
+        type: 'Hotel',
         price: '',
+        // Step 2
         address: '',
         city: '',
-        images: ['https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=1974'], // Mock image
-        amenities: ['WiFi', 'Pool', 'Spa'], // Mock amenities
-        subscriptionTier: 'SILVER', // Default
+        state: '',
+        zipCode: '',
+        // Step 3
+        amenities: [] as string[],
+        images: [] as string[],
+        // Step 4
+        subscriptionTier: 'SILVER',
     });
+
+    const updateField = (field: string, value: any) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+    };
 
     const handleNext = () => {
         if (currentStep < steps.length) {
@@ -51,99 +64,43 @@ export default function ListPropertyPage() {
 
     const handleSubmit = async () => {
         setLoading(true);
-        try {
-            // 1. Create Hotel
-            const hotelRes = await fetch('http://localhost:3001/api/hotels', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: formData.name,
-                    description: formData.description,
-                    address: formData.address,
-                    city: formData.city,
-                    price: parseInt(formData.price),
-                    images: formData.images,
-                    amenities: formData.amenities,
-                }),
-            });
-
-            if (!hotelRes.ok) throw new Error('Failed to create hotel');
-            const hotel = await hotelRes.json();
-
-            // 2. Create Subscription
-            const subRes = await fetch('http://localhost:3001/api/subscriptions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    hotelId: hotel.id,
-                    tier: formData.subscriptionTier,
-                    durationMonths: 12
-                }),
-            });
-
-            if (!subRes.ok) throw new Error('Failed to create subscription');
-
-            // Success!
-            router.push('/dashboard?view=properties&success=true');
-        } catch (error) {
-            console.error(error);
-            alert('Something went wrong. Please try again.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const updateField = (field: string, value: any) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
+        // Simulate API call
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        setLoading(false);
+        router.push('/owner/dashboard');
     };
 
     return (
-        <div className="min-h-screen bg-[#020617] text-white selection:bg-accent-gold/30">
+        <div className="min-h-screen bg-black text-white selection:bg-amber-500/30 font-sans">
             <Navbar />
 
-            <div className="max-w-6xl mx-auto px-6 pt-32 pb-20">
-                {/* Header */}
+            <div className="pt-32 pb-20 px-6 max-w-7xl mx-auto">
+                {/* Header Container */}
                 <motion.div
                     className="text-center mb-12"
-                    initial={{ opacity: 0, y: -20 }}
+                    initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                 >
-                    <div className="inline-block px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full mb-4">
-                        <span className="text-emerald-400 text-sm font-bold uppercase tracking-wider">✓ Trusted by 500+ Hotels</span>
+                    <div className="inline-block px-4 py-2 bg-amber-500/10 border border-amber-500/20 rounded-full mb-6">
+                        <span className="text-accent-gold text-sm font-bold uppercase tracking-wider">Partner with NeonStay™</span>
                     </div>
-                    <h1 className="text-4xl md:text-6xl font-bold font-heading mb-4 text-white">
-                        List Your <span className="text-premium-gold">Premium</span> Property
+                    <h1 className="text-4xl md:text-6xl font-bold font-heading mb-4">
+                        List Your <span className="text-gradient-neo">Property</span>
                     </h1>
-                    <p className="text-slate-400 text-xl mb-6">Join NeonStay and reach verified luxury travelers worldwide.</p>
-
-                    {/* Trust Indicators */}
-                    <div className="flex flex-wrap gap-6 justify-center items-center mt-8">
-                        <div className="flex items-center gap-2">
-                            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                            <span className="text-sm text-slate-300">Free to List</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                            <span className="text-sm text-slate-300">24hr Payouts</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                            <span className="text-sm text-slate-300">8-15% Commission</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                            <span className="text-sm text-slate-300">Premium Support</span>
-                        </div>
-                    </div>
+                    <p className="text-slate-400 text-lg max-w-2xl mx-auto">
+                        Join the world's most exclusive network of luxury accommodations. Reach high-net-worth travelers globally.
+                    </p>
                 </motion.div>
 
-                {/* Progress Steps */}
-                <div className="flex justify-between items-center max-w-3xl mx-auto mb-16 relative">
-                    <div className="absolute top-1/2 left-0 w-full h-1 bg-white/10 -z-10 rounded-full" />
-                    <div
-                        className="absolute top-1/2 left-0 h-1 bg-accent-gold -z-10 rounded-full transition-all duration-500"
-                        style={{ width: `${((currentStep - 1) / (steps.length - 1)) * 100}%` }}
-                    />
+                {/* Stepper */}
+                <div className="flex justify-between md:justify-center items-center mb-12 relative max-w-4xl mx-auto">
+                    {/* Connecting Line */}
+                    <div className="absolute left-[10%] right-[10%] top-5 h-[2px] bg-white/10 -z-10 hidden md:block">
+                        <div
+                            className="h-full bg-accent-gold transition-all duration-500 ease-out shadow-[0_0_15px_rgba(251,191,36,0.5)]"
+                            style={{ width: `${((currentStep - 1) / (steps.length - 1)) * 100}%` }}
+                        />
+                    </div>
 
                     {steps.map((step) => (
                         <div key={step.id} className="flex flex-col items-center gap-2 bg-[#020617] px-2">
@@ -247,8 +204,8 @@ export default function ListPropertyPage() {
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-slate-400">Full Address</label>
                                     <Input
-                                        className="bg-black/20 border-white/10 h-12 text-white focus:border-accent-gold/50"
-                                        placeholder="e.g. 123 Beach Road, Palm Jumeirah"
+                                        className="bg-black/20 border-white/10 h-12 text-white placeholder:text-slate-600 focus:border-accent-gold/50"
+                                        placeholder="123 Luxury Avenue"
                                         value={formData.address}
                                         onChange={(e) => updateField('address', e.target.value)}
                                     />
@@ -257,18 +214,36 @@ export default function ListPropertyPage() {
                                     <div className="space-y-2">
                                         <label className="text-sm font-bold text-slate-400">City</label>
                                         <Input
-                                            className="bg-black/20 border-white/10 h-12 text-white focus:border-accent-gold/50"
-                                            placeholder="e.g. Dubai"
+                                            className="bg-black/20 border-white/10 h-12 text-white placeholder:text-slate-600 focus:border-accent-gold/50"
+                                            placeholder="Goa"
                                             value={formData.city}
                                             onChange={(e) => updateField('city', e.target.value)}
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-sm font-bold text-slate-400">Country</label>
+                                        <label className="text-sm font-bold text-slate-400">State / Region</label>
                                         <Input
-                                            className="bg-black/20 border-white/10 h-12 text-white focus:border-accent-gold/50"
-                                            placeholder="e.g. UAE"
+                                            className="bg-black/20 border-white/10 h-12 text-white placeholder:text-slate-600 focus:border-accent-gold/50"
+                                            placeholder="Goa"
+                                            value={formData.state}
+                                            onChange={(e) => updateField('state', e.target.value)}
                                         />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-slate-400">Zip / Postal Code</label>
+                                    <Input
+                                        className="bg-black/20 border-white/10 h-12 text-white placeholder:text-slate-600 focus:border-accent-gold/50 max-w-[200px]"
+                                        placeholder="403001"
+                                        value={formData.zipCode}
+                                        onChange={(e) => updateField('zipCode', e.target.value)}
+                                    />
+                                </div>
+                                {/* Mock Map Area */}
+                                <div className="w-full h-48 bg-black/40 border border-white/10 rounded-xl flex items-center justify-center relative overflow-hidden group">
+                                    <MapPin className="w-8 h-8 text-slate-500 group-hover:text-accent-gold transition-colors" />
+                                    <div className="absolute inset-x-0 bottom-4 text-center text-xs text-slate-500">
+                                        Map preview will appear after address is entered
                                     </div>
                                 </div>
                             </motion.div>
@@ -281,17 +256,21 @@ export default function ListPropertyPage() {
                                 initial={{ opacity: 0, x: 20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -20 }}
-                                className="space-y-6 max-w-2xl mx-auto"
+                                className="space-y-8 max-w-3xl mx-auto"
                             >
-                                <h2 className="text-2xl font-bold font-heading mb-6">Make it stand out</h2>
+                                <h2 className="text-2xl font-bold font-heading mb-6">Showcase your property</h2>
 
+                                {/* Image Upload Area */}
                                 <div className="space-y-4">
-                                    <h3 className="text-lg font-bold text-white mb-2">Property Gallery</h3>
+                                    <label className="text-sm font-bold text-slate-400 flex justify-between">
+                                        <span>High-Quality Images</span>
+                                        <span>{formData.images.length}/10</span>
+                                    </label>
 
                                     <div className="flex gap-4">
                                         <Input
-                                            placeholder="Paste image URL (Unsplash, etc.)"
-                                            className="bg-black/20 border-white/10 h-12 text-white focus:border-accent-gold/50"
+                                            placeholder="Paste Unsplash URL for demo (e.g. https://images.unsplash.com/...)"
+                                            className="bg-black/20 border-white/10 text-white h-12"
                                             id="image-url-input"
                                         />
                                         <Button
@@ -311,7 +290,7 @@ export default function ListPropertyPage() {
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                                         {formData.images.map((img, idx) => (
                                             <div key={idx} className="relative aspect-video rounded-lg overflow-hidden border border-white/10 group">
-                                                <img src={img} alt={`Property ${idx}`} className="w-full h-full object-cover" />
+                                                <Image src={img} alt={`Property ${idx}`} fill sizes="(max-width: 768px) 50vw, 25vw" className="object-cover" />
                                                 <button
                                                     onClick={() => updateField('images', formData.images.filter((_, i) => i !== idx))}
                                                     className="absolute top-2 right-2 p-1 bg-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
@@ -340,7 +319,7 @@ export default function ListPropertyPage() {
                                                     "px-4 py-2 rounded-full border text-sm font-medium cursor-pointer transition-all",
                                                     formData.amenities.includes(amenity)
                                                         ? "bg-accent-gold text-black border-accent-gold"
-                                                        : "bg-black/20 border-white/10 text-slate-400 hover:border-white/30"
+                                                        : "bg-black/20 border-white/10 text-slate-300 hover:border-white/30"
                                                 )}
                                             >
                                                 {amenity}

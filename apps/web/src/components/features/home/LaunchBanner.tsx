@@ -50,8 +50,8 @@ export default function LaunchBanner() {
                                 </div>
                                 <div className="w-full h-2 bg-black/30 rounded-full overflow-hidden">
                                     <div
-                                        className="h-full bg-gradient-to-r from-amber-400 to-orange-500 transition-all duration-500 rounded-full"
-                                        style={{ width: `${progress}%` }}
+                                        className="h-full bg-gradient-to-r from-amber-400 to-orange-500 transition-all duration-500 rounded-full w-[var(--launch-progress)]"
+                                        style={{ '--launch-progress': `${progress}%` } as React.CSSProperties}
                                     />
                                 </div>
                             </div>

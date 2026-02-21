@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import Link from 'next/link';
+import Image from 'next/image';
 import Footer from '@/components/layout/Footer';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -167,9 +168,8 @@ export default function OwnerDashboard() {
                                         className="group relative bg-[#0f172a] rounded-2xl overflow-hidden border border-white/10 hover:border-accent-gold/50 transition-all"
                                     >
                                         <div className="h-48 bg-slate-800 relative">
-                                            {/* Placeholder image if none */}
                                             {hotel.images?.[0] ? (
-                                                <img src={hotel.images[0]} alt={hotel.name} className="w-full h-full object-cover" />
+                                                <Image src={hotel.images[0]} alt={hotel.name} fill sizes="(max-width: 1024px) 100vw, 33vw" className="object-cover" />
                                             ) : (
                                                 <div className="absolute inset-0 bg-slate-700 flex items-center justify-center text-slate-500">
                                                     <Building className="w-10 h-10" />

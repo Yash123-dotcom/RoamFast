@@ -109,25 +109,27 @@ export class WebhookController {
                 paymentIntentId: paymentIntent.id,
             });
 
+            const b = booking as any;
+
             // Send confirmation email
             await emailService.sendBookingConfirmation(
                 metadata.userEmail || 'user@example.com', // Fallback as metadata might not have email, ideally pass it
                 metadata.userName || 'Valued Guest',
                 {
-                    id: booking.id,
-                    hotelName: (booking as any).hotel?.name || 'Hotel',
-                    checkIn: booking.checkIn,
-                    checkOut: booking.checkOut,
-                    totalPrice: booking.totalPrice
+                    id: b.id,
+                    hotelName: b.hotel?.name || 'Hotel',
+                    checkIn: b.checkIn,
+                    checkOut: b.checkOut,
+                    totalPrice: b.totalPrice
                 }
             );
 
             // Notify Owner
-            if ((booking as any).hotel?.owner?.email) {
+            if (b.hotel?.owner?.email) {
                 await emailService.sendNewBookingNotification(
-                    (booking as any).hotel.owner.email,
-                    (booking as any).hotel.name || 'Your Property',
-                    booking.totalPrice
+                    b.hotel.owner.email,
+                    b.hotel.name || 'Your Property',
+                    b.totalPrice
                 );
             }
         } catch (error) {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Navbar from '@/components/layout/Navbar';
+import Image from 'next/image';
 import Footer from '@/components/layout/Footer';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -49,10 +50,13 @@ export default function HotelDetails() {
       {/* Hero Section */}
       <div className="relative h-[60vh] w-full mt-20 group overflow-hidden">
         <div className="absolute inset-0 animate-kenburns">
-          <img
+          <Image
             src={heroImage}
             alt={hotel.name}
-            className="w-full h-full object-cover brightness-75"
+            fill
+            sizes="100vw"
+            priority
+            className="object-cover brightness-75"
           />
         </div>
         <div className="absolute inset-0 bg-gradient-to-t from-[#020617] via-[#020617]/40 to-black/30"></div>
@@ -81,7 +85,7 @@ export default function HotelDetails() {
 
       <div className="max-w-7xl mx-auto px-6 py-12 grid grid-cols-1 lg:grid-cols-3 gap-12">
         {/* LEFT COLUMN */}
-        <div className="lg:col-span-2 space-y-12 animate-enter" style={{ animationDelay: '0.2s' }}>
+        <div className="lg:col-span-2 space-y-12 animate-enter [animation-delay:200ms]">
           {/* About Section */}
           <div className="bg-[#0f172a]/50 p-8 rounded-[24px] border border-white/5 shadow-sm backdrop-blur-sm">
             <h3 className="text-2xl font-bold text-white mb-4 font-heading">About this Sanctuary</h3>
@@ -149,7 +153,7 @@ export default function HotelDetails() {
 
         {/* Sticky Booking Card */}
         <div className="lg:col-span-1">
-          <div className="sticky top-32 bg-[#0f172a] p-8 rounded-[24px] border border-white/10 shadow-xl shadow-black/20 animate-enter" style={{ animationDelay: '0.4s' }}>
+          <div className="sticky top-32 bg-[#0f172a] p-8 rounded-[24px] border border-white/10 shadow-xl shadow-black/20 animate-enter [animation-delay:400ms]">
             <div className="flex justify-between items-end mb-8">
               <span className="text-slate-400 font-medium text-sm uppercase tracking-wider">Starting from</span>
               <div className="text-3xl font-bold text-white">

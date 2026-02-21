@@ -171,9 +171,9 @@ export class CommissionService {
         }
 
         const totalBookings = commissions.length;
-        const totalRevenue = commissions.reduce((sum, c) => sum + (c.booking?.totalPrice || 0), 0);
-        const totalCommission = commissions.reduce((sum, c) => sum + (c.commissionAmount || 0) + (c.platformFee || 0), 0);
-        const totalPayout = commissions.reduce((sum, c) => sum + (c.hotelPayout || 0), 0);
+        const totalRevenue = commissions.reduce((sum, c: any) => sum + (c.booking?.totalPrice || 0), 0);
+        const totalCommission = commissions.reduce((sum, c: any) => sum + (c.commissionAmount || 0) + (c.platformFee || 0), 0);
+        const totalPayout = commissions.reduce((sum, c: any) => sum + (c.hotelPayout || 0), 0);
 
         return {
             totalBookings,
