@@ -42,7 +42,7 @@ export default function HeroSearch() {
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="flex flex-col items-center mb-12"
         >
-          <div className="inline-flex items-center gap-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full px-6 py-2 mb-8 shadow-[0_0_30px_rgba(251,191,36,0.1)]">
+          <div className="inline-flex items-center gap-3 bg-white/5 backdrop-blur-sm border border-white/10 rounded-full px-6 py-2 mb-8 shadow-[0_0_30px_rgba(251,191,36,0.1)]">
             <Star className="w-3.5 h-3.5 text-accent-gold fill-accent-gold animate-pulse" />
             <span className="text-accent-gold font-bold tracking-[0.25em] text-[11px] uppercase">
               Verified Luxury • Personally Vetted
@@ -70,7 +70,7 @@ export default function HeroSearch() {
           {/* Glow Effect */}
           <div className="absolute -inset-1 bg-gradient-to-r from-amber-500/20 via-white/10 to-amber-500/20 rounded-[40px] blur-xl opacity-50" />
 
-          <div className="relative bg-black/40 backdrop-blur-2xl border border-white/10 p-2 rounded-[32px] flex flex-col md:flex-row gap-2 shadow-2xl">
+          <div className="relative bg-black/40 backdrop-blur-md border border-white/10 p-2 rounded-[32px] flex flex-col md:flex-row gap-2 shadow-2xl">
 
             {/* Location Input */}
             <div className="flex-1 relative group bg-white/5 hover:bg-white/10 transition-colors rounded-[24px] border border-transparent hover:border-white/5">

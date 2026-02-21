@@ -52,7 +52,7 @@ export default function BookPage() {
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: 0.2 }}
-                        className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-[32px] p-4 md:p-6 shadow-[0_0_50px_rgba(0,0,0,0.5)]"
+                        className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-[32px] p-4 md:p-6 shadow-[0_0_50px_rgba(0,0,0,0.5)]"
                     >
                         <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                             {/* Destination */}

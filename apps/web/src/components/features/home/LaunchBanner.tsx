@@ -30,7 +30,7 @@ export default function LaunchBanner() {
 
     return (
         <div className="fixed top-20 left-0 right-0 z-40 flex justify-center px-4 pointer-events-none">
-            <div className="pointer-events-auto bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 backdrop-blur-xl rounded-2xl p-4 max-w-2xl w-full shadow-2xl">
+            <div className="pointer-events-auto bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 backdrop-blur-sm rounded-2xl p-4 max-w-2xl w-full shadow-2xl">
                 <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">

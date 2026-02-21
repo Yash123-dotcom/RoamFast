@@ -112,7 +112,7 @@ export default function ForHotelsPage() {
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
 
                                 {/* Floating Stats Card */}
-                                <div className="absolute bottom-6 left-6 right-6 bg-black/80 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
+                                <div className="absolute bottom-6 left-6 right-6 bg-black/80 backdrop-blur-sm border border-white/10 rounded-2xl p-6">
                                     <div className="flex justify-between items-center">
                                         <div>
                                             <div className="text-sm text-slate-400 mb-1">This Month's Revenue</div>

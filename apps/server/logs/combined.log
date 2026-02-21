@@ -627,3 +627,9 @@
 {"level":"info","message":"🚀 Server running on http://localhost:3001","timestamp":"2026-01-31 01:27:54"}
 {"level":"info","message":"Environment: development","timestamp":"2026-01-31 01:27:54"}
 {"level":"info","message":"API Version: v1","timestamp":"2026-01-31 01:27:54"}
+{"level":"debug","message":"Logger initialized in development mode","timestamp":"2026-02-22 05:04:17"}
+{"level":"info","message":"🚀 Server running on http://localhost:3001","timestamp":"2026-02-22 05:04:18"}
+{"level":"info","message":"Environment: development","timestamp":"2026-02-22 05:04:18"}
+{"level":"info","message":"API Version: v1","timestamp":"2026-02-22 05:04:18"}
+{"ip":"::1","level":"info","message":"→ GET /","method":"GET","path":"/","query":{},"timestamp":"2026-02-22 05:04:46"}
+{"duration":"20ms","level":"error","message":"← GET / 404 20ms","method":"GET","path":"/","statusCode":404,"timestamp":"2026-02-22 05:04:46"}

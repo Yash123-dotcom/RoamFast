@@ -172,7 +172,7 @@ export default function Home() {
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
 
                         {/* Floating Badge */}
-                        <div className="absolute bottom-6 left-6 right-6 bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl p-4">
+                        <div className="absolute bottom-6 left-6 right-6 bg-black/80 backdrop-blur-sm border border-white/10 rounded-xl p-4">
                            <div className="flex items-center justify-between">
                               <div>
                                  <div className="text-xs text-slate-400 mb-1">This Month</div>

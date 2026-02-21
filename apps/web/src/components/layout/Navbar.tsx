@@ -146,7 +146,7 @@ export default function Navbar() {
         initial={{ opacity: 0, y: '-100%' }}
         animate={{ opacity: isOpen ? 1 : 0, y: isOpen ? '0%' : '-100%' }}
         transition={{ type: "spring", damping: 25, stiffness: 200 }}
-        className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-40 md:hidden flex flex-col justify-center items-center gap-8"
+        className="fixed inset-0 bg-black/95 backdrop-blur-md z-40 md:hidden flex flex-col justify-center items-center gap-8"
       >
         {navLinks.map((link) => (
           <Link
