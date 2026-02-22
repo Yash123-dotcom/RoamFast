@@ -28,7 +28,7 @@ export default function DashboardPage() {
             if (!token) return;
 
             try {
-               const res = await fetch('http://localhost:3001/api/bookings/my-bookings', {
+               const res = await fetch('http://localhost:3001/api/v1/bookings/my', {
                   headers: {
                      'Authorization': `Bearer ${token}`,
                   },
