@@ -7,11 +7,11 @@ This document serves as the "Master Manual" for the NeonStay (RoamFast) monorepo
 ## 🏛️ Project Root Configuration
 - **`package.json`**: Defines the workspace roots (`apps/*`). This is why you can run `npm install` at the root and it installs dependencies for both the frontend and backend.
 - **`.env`**: The single source of truth for secrets. **Interview Note:** We configured the backend to look "up" two directories to find this file, ensuring consistent configuration across the monorepo.
-- **`docker-compose.yml`**: Orhcestrates local development services (like a local MongoDB instance if needed) in a containerized environment.
+- **`docker-compose.yml`**: Orchestrates local development services (like a local MongoDB instance if needed) in a containerized environment.
 
 ---
 
-## ⚙️ Backend: `apps/server/src/`
+## ⚙️ Backend Deep Dive: `apps/server/src/`
 
 ### 🔹 `index.ts` (Entry Point)
 - **What it does**: Initializes Express, registers middleware (CORS, Helmet, Body Parser), connects to MongoDB via `connectDB()`, and starts the HTTP listener.
@@ -34,44 +34,56 @@ This document serves as the "Master Manual" for the NeonStay (RoamFast) monorepo
 ### 🔸 `services/` (Business Logic)
 *This is where the "intellectual property" of the app lives.*
 - **`quality-score.service.ts`**: Runs a weighted algorithm. It queries MongoDB for the latest reviews and updates the `Hotel` document's rating and score.
-- **`seed.service.ts`**: A "DevOps" service. It uses `User.findOneOrCreate` logic to ensure a `demo@neonstay.com` account exists and creates realistic hotels like "The Taj Mahal Palace" for testing.
+- **`seed.service.ts`**: A "DevOps" service. It ensures a `demo@neonstay.com` account exists and creates realistic hotels like "The Taj Mahal Palace" for testing.
 - **`booking.service.ts`**: Contains the logic for "Atomic Bookings." It prevents double-booking and handles the relationship between a Guest, a Hotel, and a Payment ID.
-
-### 🔸 `middleware/` (The Gatekeepers)
-- **`auth.ts`**: Decodes the `Bearer` token from the Authorization header using `auth.verifyIdToken`. It handles **Role-Based Access Control (RBAC)**—ensuring only Admins can approve hotels and only Owners can see analytics.
-- **`errorHandler.ts`**: A centralized catch-all. If any part of the app throws an error, this middleware formats it into a pretty JSON response (`{ error: "message" }`) instead of crashing the server.
 
 ---
 
-## 🎨 Frontend: `apps/web/src/`
+## 🎨 Frontend Deep Dive: `apps/web/src/`
 
-### 🔹 `app/` (Pages & Layout)
-- **`layout.tsx`**: The global wrapper. Contains the `<Navbar />`, `<Footer />`, and the **Lenis Smooth Scroll** provider for a premium feel.
-- **`hotels/[id]/page.tsx`**: A **Dynamic Route**. It reads the hotel ID from the URL, fetches data from the API, and renders the hotel details.
+### 🔹 `app/` (The Next.js Router & Pages)
+- **`(home)/page.tsx`**: The landing page. It uses the `searchService` to fetch featured cities and hotels on the server-side for maximum SEO.
+- **`hotels/[id]/page.tsx`**: A **Dynamic Route**. Fetching hotel details, rooms, and reviews for a specific ID.
+- **`search/page.tsx`**: Manages complex URL state. When you filter by price, it updates the browser URL (e.g., `?minPrice=5000`), which triggers a server-side re-fetch.
+- **`checkout/page.tsx`**: Integrates **Stripe Elements**. It wraps the payment form in an `<Elements>` provider so your code never handles raw credit card numbers.
 
 ### 🔹 `components/` (The Building Blocks)
-- **`search/SearchFilters.tsx`**: A stateful component that allows users to filter hotels by price or amenities without a full page reload.
-- **`booking/BookingCalendar.tsx`**: Uses `react-day-picker` to let users select check-in/out dates, passing the state up to the Checkout form.
+- **`ui/`**: Contains **Shadcn UI** components (Buttons, Dialogs). Built on top of **Radix UI** for world-class accessibility.
+- **`hotel/HotelCard.tsx`**: A reusable card that displays the image, price, and the **Quality Score Badge**.
+- **`booking/BookingForm.tsx`**: Handles the date selection logic and price calculation before sending the user to checkout.
+- **`layout/Navbar.tsx`**: Uses the `AuthContext` to toggle between "Login/Signup" and "User Profile" based on the user's session.
 
-### 🔹 `context/` & `hooks/`
-- **`AuthContext.tsx`**: Uses the Firebase Web SDK to track the user's login state (`currentUser`). It provides this state to every component in the app.
-- **`useStripe.ts`**: A custom hook that wraps the Stripe SDK, making it easy to trigger a payment UI with one line of code.
+### 🔹 `hooks/` (Custom React Logic)
+- **`useAuth.ts`**: A shortcut hook. Any component can just call `const { user } = useAuth()` to get the current guest's info.
+- **`useMediaQuery.ts`**: Handles responsive logic in JavaScript (e.g., changing layouts for mobile vs. desktop).
+
+### 🔹 `services/` (API Client Layer)
+- **`api.ts`**: The base fetch client. It automatically adds the `Authorization: Bearer <token>` header to every request if the user is logged in.
+- **`hotelService.ts`**: Frontend functions like `getHotels()` and `getHotelById()`, mapping directly to the backend API.
+
+### 🔹 `context/` (Global State)
+- **`AuthContext.tsx`**: The "Traffic Controller" for the user. It listens to Firebase's `onAuthStateChanged` and updates the entire app state.
+
+### 🔹 `lib/` (Utilities)
+- **`utils.ts`**: Contains the `cn()` function for conditionally merging **Tailwind CSS** classes smoothly.
 
 ---
 
 ## 🔄 How the data flows (Interview walkthrough)
 
-**Interviewer: "What happens when a user clicks 'Approve' on a hotel?"**
-1. **Frontend**: The Admin Dashboard calls `PUT /api/admin/approve/:id`.
-2. **Routes**: `admin.routes.ts` checks the `auth.ts` middleware to ensure the user is an **ADMIN**.
-3. **Controller**: `admin.controller.ts` receives the ID and calls `AdminService.approveHotel(id)`.
-4. **Service**: The service updates the `Hotel` status in MongoDB to `APPROVED`. It then calls the `emailService` to notify the hotel owner.
-5. **Database**: MongoDB saves the change.
-6. **Response**: The Controller sends a `200 OK` back to the frontend, which updates the UI.
+**Interviewer: "How does a search query move through your app?"**
+1. **Frontend UI**: User types "Mumbai" into the SearchBar.
+2. **Frontend Logic**: The SearchBar calls `router.push('/search?query=Mumbai')`.
+3. **Frontend Page**: `search/page.tsx` reads the query param and calls `hotelService.search(query)`.
+4. **Network**: A fetch request goes to `http://localhost:3001/api/hotels?query=Mumbai`.
+5. **Backend Route**: `hotel.routes.ts` sends it to the `HotelController`.
+6. **Backend Controller**: Controller calls `HotelService.searchHotels("Mumbai")`.
+7. **Database**: Service runs a **MongoDB Regex** query: `Hotel.find({ city: /Mumbai/i })`.
+8. **Final Result**: Data travels back up the chain and is rendered on the screen.
 
 ---
 
 ## 💎 Advanced Features to Highlight
-1. **Stripe Idempotency**: Mention that you check for an existing `paymentIntentId` in the `Booking` collection before creating a new one in the webhook. This prevents multiple charges/bookings if a webhook is retried.
-2. **Scalable Search**: The `HotelService` uses MongoDB regex search (`$regex`) with the `i` (case-insensitive) flag, making the search bar very user-friendly.
-3. **Mongoose Virtuals**: By mapping `_id` to `id` in the schema level, you kept the frontend code clean and decoupled from MongoDB's internal naming conventions.
+1. **Stripe Idempotency**: Checking for an existing `paymentIntentId` in the `Booking` collection before creating a new one in the webhook.
+2. **Weighted Quality Score**: Using a calculated score (cleanliness, service, etc.) rather than a simple 5-star average.
+3. **Mongoose Virtuals**: mapping `_id` to `id` at the schema level to keep the frontend code clean.
