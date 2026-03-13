@@ -7,6 +7,7 @@ import { requestLogger } from '@/middleware/requestLogger';
 import { errorHandler } from '@/middleware/errorHandler';
 import { apiLimiter } from '@/middleware/rateLimiter';
 import routes from '@/routes';
+import { connectDB } from '@/config/mongodb';
 
 const app = express();
 
@@ -49,19 +50,28 @@ app.use(routes);
 app.use(errorHandler);
 
 // Start server
-const server = app.listen(config.port, () => {
-  logger.info(`🚀 Server running on http://localhost:${config.port}`);
-  logger.info(`Environment: ${config.env}`);
-  logger.info(`API Version: v1`);
-});
+async function startServer() {
+  await connectDB();
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM signal received: closing HTTP server');
-  server.close(() => {
-    logger.info('HTTP server closed');
-    process.exit(0);
+  const server = app.listen(config.port, () => {
+    logger.info(`🚀 Server running on http://localhost:${config.port}`);
+    logger.info(`Environment: ${config.env}`);
+    logger.info(`API Version: v1`);
   });
+
+  // Graceful shutdown
+  process.on('SIGTERM', () => {
+    logger.info('SIGTERM signal received: closing HTTP server');
+    server.close(() => {
+      logger.info('HTTP server closed');
+      process.exit(0);
+    });
+  });
+}
+
+startServer().catch((err) => {
+  logger.error('Failed to start server:', err);
+  process.exit(1);
 });
 
-export default app;
+export default app;

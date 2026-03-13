@@ -1,4 +1,6 @@
-import { db } from '@/config/firebase';
+import { Subscription } from '@/models/Subscription';
+import { Hotel } from '@/models/Hotel';
+import { User } from '@/models/User';
 import { SubscriptionTier } from '@/constants/enums';
 
 // Subscription pricing (monthly in ₹)
@@ -10,8 +12,6 @@ const SUBSCRIPTION_PRICES: Record<SubscriptionTier, number> = {
 };
 
 export class SubscriptionService {
-    private collection = db.collection('subscriptions');
-
     /**
      * Create a new subscription for a hotel
      */
@@ -25,89 +25,51 @@ export class SubscriptionService {
         const endDate = new Date();
         endDate.setMonth(endDate.getMonth() + durationMonths);
 
-        // Deactivate any existing subscriptions
-        const existingSubscriptions = await this.collection
-            .where('hotelId', '==', hotelId)
-            .where('active', '==', true)
-            .get();
+        // Deactivate any existing active subscriptions
+        await Subscription.updateMany({ hotelId, active: true }, { active: false });
 
-        const batch = db.batch();
-        existingSubscriptions.docs.forEach(doc => {
-            batch.update(doc.ref, { active: false });
-        });
-        await batch.commit();
-
-        // Create new subscription
-        const subscriptionData = {
+        const subscription = await new Subscription({
             hotelId,
             tier,
             startDate,
             endDate,
             price: price * durationMonths,
             active: true,
-            createdAt: new Date(),
-        };
+        }).save();
 
-        const docRef = await this.collection.add(subscriptionData);
-        const created = await docRef.get();
-
-        return {
-            id: created.id,
-            ...created.data(),
-        };
+        return { ...subscription.toObject(), id: subscription._id.toString() };
     }
 
     /**
      * Upgrade subscription to a higher tier
      */
-    async upgradeSubscription(
-        subscriptionId: string,
-        newTier: SubscriptionTier
-    ): Promise<any> {
-        const subscriptionDoc = await this.collection.doc(subscriptionId).get();
+    async upgradeSubscription(subscriptionId: string, newTier: SubscriptionTier): Promise<any> {
+        const subscription = await Subscription.findById(subscriptionId);
+        if (!subscription) throw new Error('Subscription not found');
 
-        if (!subscriptionDoc.exists) {
-            throw new Error('Subscription not found');
-        }
-
-        const subscriptionData = subscriptionDoc.data();
-        const oldPrice = SUBSCRIPTION_PRICES[subscriptionData?.tier as SubscriptionTier];
+        const oldPrice = SUBSCRIPTION_PRICES[subscription.tier as SubscriptionTier];
         const newPrice = SUBSCRIPTION_PRICES[newTier];
         const priceDifference = newPrice - oldPrice;
 
-        await this.collection.doc(subscriptionId).update({
-            tier: newTier,
-            price: (subscriptionData?.price || 0) + priceDifference,
-        });
+        subscription.tier = newTier;
+        subscription.price = subscription.price + priceDifference;
+        await subscription.save();
 
-        const updated = await this.collection.doc(subscriptionId).get();
-        return {
-            id: updated.id,
-            ...updated.data(),
-        };
+        return { ...subscription.toObject(), id: subscription._id.toString() };
     }
 
     /**
      * Check if a hotel has an active subscription
      */
     async getActiveSubscription(hotelId: string): Promise<any | null> {
-        const snapshot = await this.collection
-            .where('hotelId', '==', hotelId)
-            .where('active', '==', true)
-            .where('endDate', '>=', new Date())
-            .orderBy('createdAt', 'desc')
-            .limit(1)
-            .get();
+        const subscription = await Subscription.findOne({
+            hotelId,
+            active: true,
+            endDate: { $gte: new Date() },
+        }).sort({ createdAt: -1 }).lean();
 
-        if (snapshot.empty) {
-            return null;
-        }
-
-        const doc = snapshot.docs[0];
-        return {
-            id: doc.id,
-            ...doc.data(),
-        };
+        if (!subscription) return null;
+        return { ...subscription, id: subscription._id.toString() };
     }
 
     /**
@@ -130,10 +92,7 @@ export class SubscriptionService {
             commissionRate: this.getCommissionRate(tier),
         };
 
-        return {
-            ...hotel,
-            subscriptionBenefits: benefits,
-        };
+        return { ...hotel, subscriptionBenefits: benefits };
     }
 
     /**
@@ -150,74 +109,58 @@ export class SubscriptionService {
     }
 
     /**
-     * Check for expiring subscriptions and send notifications
+     * Check for expiring subscriptions
      */
     async checkExpiringSubscriptions(): Promise<any[]> {
         const thirtyDaysFromNow = new Date();
         thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
-        const snapshot = await this.collection
-            .where('active', '==', true)
-            .where('endDate', '<=', thirtyDaysFromNow)
-            .where('endDate', '>=', new Date())
-            .get();
+        const subscriptions = await Subscription.find({
+            active: true,
+            endDate: { $lte: thirtyDaysFromNow, $gte: new Date() },
+        }).lean();
 
-        const subscriptions = await Promise.all(
-            snapshot.docs.map(async (doc) => {
-                const subData = doc.data();
-                const hotelDoc = await db.collection('hotels').doc(subData.hotelId).get();
-                const hotelData = hotelDoc.exists ? hotelDoc.data() : null;
-
+        const result = await Promise.all(
+            subscriptions.map(async (sub) => {
+                const hotel = await Hotel.findById(sub.hotelId).lean();
                 let owner = null;
-                if (hotelData?.ownerId) {
-                    const ownerDoc = await db.collection('users').doc(hotelData.ownerId).get();
-                    owner = ownerDoc.exists ? ownerDoc.data() : null;
+
+                if (hotel?.ownerId) {
+                    const ownerDoc = await User.findById(hotel.ownerId).lean();
+                    owner = ownerDoc ?? null;
                 }
 
                 return {
-                    id: doc.id,
-                    ...subData,
-                    hotel: {
-                        id: hotelDoc.id,
-                        ...hotelData,
+                    ...sub,
+                    id: sub._id.toString(),
+                    hotel: hotel ? {
+                        ...hotel,
+                        id: hotel._id.toString(),
                         owner,
-                    },
+                    } : null,
                 };
             })
         );
 
-        return subscriptions;
+        return result;
     }
 
     /**
      * Renew subscription
      */
-    async renewSubscription(
-        subscriptionId: string,
-        durationMonths: number = 1
-    ): Promise<any> {
-        const subscriptionDoc = await this.collection.doc(subscriptionId).get();
+    async renewSubscription(subscriptionId: string, durationMonths: number = 1): Promise<any> {
+        const subscription = await Subscription.findById(subscriptionId);
+        if (!subscription) throw new Error('Subscription not found');
 
-        if (!subscriptionDoc.exists) {
-            throw new Error('Subscription not found');
-        }
-
-        const subscriptionData = subscriptionDoc.data();
-        const newEndDate = new Date(subscriptionData?.endDate);
+        const newEndDate = new Date(subscription.endDate);
         newEndDate.setMonth(newEndDate.getMonth() + durationMonths);
 
-        const price = SUBSCRIPTION_PRICES[subscriptionData?.tier as SubscriptionTier];
+        const price = SUBSCRIPTION_PRICES[subscription.tier as SubscriptionTier];
+        subscription.endDate = newEndDate;
+        subscription.price = subscription.price + price * durationMonths;
+        await subscription.save();
 
-        await this.collection.doc(subscriptionId).update({
-            endDate: newEndDate,
-            price: (subscriptionData?.price || 0) + price * durationMonths,
-        });
-
-        const updated = await this.collection.doc(subscriptionId).get();
-        return {
-            id: updated.id,
-            ...updated.data(),
-        };
+        return { ...subscription.toObject(), id: subscription._id.toString() };
     }
 
     /**
@@ -228,10 +171,10 @@ export class SubscriptionService {
         tierDistribution: Record<SubscriptionTier, number>;
         activeSubscriptions: number;
     }> {
-        const snapshot = await this.collection
-            .where('active', '==', true)
-            .where('endDate', '>=', new Date())
-            .get();
+        const subscriptions = await Subscription.find({
+            active: true,
+            endDate: { $gte: new Date() },
+        }).lean();
 
         let totalRevenue = 0;
         const tierDistribution: Record<SubscriptionTier, number> = {
@@ -241,19 +184,16 @@ export class SubscriptionService {
             PLATINUM: 0,
         };
 
-        snapshot.docs.forEach(doc => {
-            const data = doc.data();
-            totalRevenue += data.price || 0;
-            const tier = data.tier as SubscriptionTier;
-            if (tier in tierDistribution) {
-                tierDistribution[tier]++;
-            }
+        subscriptions.forEach(sub => {
+            totalRevenue += sub.price || 0;
+            const tier = sub.tier as SubscriptionTier;
+            if (tier in tierDistribution) tierDistribution[tier]++;
         });
 
         return {
             totalRevenue,
             tierDistribution,
-            activeSubscriptions: snapshot.size,
+            activeSubscriptions: subscriptions.length,
         };
     }
 }

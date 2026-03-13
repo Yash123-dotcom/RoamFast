@@ -1,4 +1,6 @@
-import { db } from '@/config/firebase';
+import { Booking } from '@/models/Booking';
+import { Hotel } from '@/models/Hotel';
+import { User } from '@/models/User';
 import { BookingStatus } from '@/constants/enums';
 import { ValidationError } from '@/utils/errors';
 import { BOOKING_STATUS } from '@/config/constants';
@@ -14,30 +16,23 @@ export interface CreateBookingData {
 }
 
 /**
- * Booking Service - Data access layer for bookings using Firestore
+ * Booking Service - Data access layer for bookings using Mongoose
  */
 export class BookingService {
-    private collection = db.collection('bookings');
-
     /**
      * Create a new booking
      */
     async createBooking(data: CreateBookingData) {
-        // Validate dates
         if (data.checkOut <= data.checkIn) {
             throw new ValidationError('Check-out date must be after check-in date');
         }
 
-        // Verify hotel exists
-        const hotelDoc = await db.collection('hotels').doc(data.hotelId).get();
-        if (!hotelDoc.exists) {
+        const hotel = await Hotel.findById(data.hotelId).lean();
+        if (!hotel) {
             throw new ValidationError('Hotel not found');
         }
 
-        const hotelData = hotelDoc.data();
-
-        // Create booking
-        const bookingData = {
+        const booking = await new Booking({
             userId: data.userId,
             hotelId: data.hotelId,
             checkIn: data.checkIn,
@@ -45,19 +40,15 @@ export class BookingService {
             totalPrice: data.totalPrice,
             paymentId: data.paymentId,
             status: BOOKING_STATUS.CONFIRMED,
-            createdAt: new Date(),
-        };
-
-        const docRef = await this.collection.add(bookingData);
-        const booking = await docRef.get();
+        }).save();
 
         return {
-            id: booking.id,
-            ...booking.data(),
+            ...booking.toObject(),
+            id: booking._id.toString(),
             hotel: {
-                name: hotelData?.name,
-                address: hotelData?.address,
-                city: hotelData?.city,
+                name: hotel.name,
+                address: hotel.address,
+                city: hotel.city,
             },
         };
     }
@@ -74,41 +65,29 @@ export class BookingService {
         paymentIntentId: string;
         stripeCustomerId?: string;
     }) {
-        // Verify hotel exists
-        const hotelDoc = await db.collection('hotels').doc(data.hotelId).get();
-        if (!hotelDoc.exists) {
+        const hotel = await Hotel.findById(data.hotelId).lean();
+        if (!hotel) {
             throw new ValidationError('Hotel not found');
         }
 
         // Check if booking already exists with this payment intent
-        const existingBookingSnapshot = await this.collection
-            .where('paymentIntentId', '==', data.paymentIntentId)
-            .limit(1)
-            .get();
-
-        if (!existingBookingSnapshot.empty) {
-            const existingDoc = existingBookingSnapshot.docs[0];
+        const existingBooking = await Booking.findOne({ paymentIntentId: data.paymentIntentId }).lean();
+        if (existingBooking) {
             logger.info('Booking already exists for payment intent', {
                 paymentIntentId: data.paymentIntentId,
-                bookingId: existingDoc.id,
+                bookingId: existingBooking._id.toString(),
             });
-            return {
-                id: existingDoc.id,
-                ...existingDoc.data(),
-            };
+            return { ...existingBooking, id: existingBooking._id.toString() };
         }
-
-        const hotelData = hotelDoc.data();
 
         // Fetch owner email if exists
         let ownerEmail = null;
-        if (hotelData?.ownerId) {
-            const ownerDoc = await db.collection('users').doc(hotelData.ownerId).get();
-            ownerEmail = ownerDoc.exists ? ownerDoc.data()?.email : null;
+        if (hotel.ownerId) {
+            const owner = await User.findById(hotel.ownerId).lean();
+            ownerEmail = owner?.email ?? null;
         }
 
-        // Create booking
-        const bookingData = {
+        const booking = await new Booking({
             userId: data.userId,
             hotelId: data.hotelId,
             checkIn: data.checkIn,
@@ -118,19 +97,15 @@ export class BookingService {
             paymentIntentId: data.paymentIntentId,
             paymentStatus: 'succeeded',
             stripeCustomerId: data.stripeCustomerId,
-            createdAt: new Date(),
-        };
-
-        const docRef = await this.collection.add(bookingData);
-        const booking = await docRef.get();
+        }).save();
 
         return {
-            id: booking.id,
-            ...booking.data(),
+            ...booking.toObject(),
+            id: booking._id.toString(),
             hotel: {
-                name: hotelData?.name,
-                address: hotelData?.address,
-                city: hotelData?.city,
+                name: hotel.name,
+                address: hotel.address,
+                city: hotel.city,
                 owner: ownerEmail ? { email: ownerEmail } : null,
             },
         };
@@ -140,61 +115,44 @@ export class BookingService {
      * Get all bookings for a user
      */
     async getUserBookings(userId: string) {
-        const snapshot = await this.collection
-            .where('userId', '==', userId)
-            .orderBy('createdAt', 'desc')
-            .get();
+        const bookings = await Booking.find({ userId }).sort({ createdAt: -1 }).lean();
 
-        const bookings = await Promise.all(
-            snapshot.docs.map(async (doc) => {
-                const bookingData = doc.data();
-                const hotelDoc = await db.collection('hotels').doc(bookingData.hotelId).get();
-                const hotelData = hotelDoc.exists ? hotelDoc.data() : null;
-
+        const bookingsWithHotels = await Promise.all(
+            bookings.map(async (booking) => {
+                const hotel = await Hotel.findById(booking.hotelId).lean();
                 return {
-                    id: doc.id,
-                    ...bookingData,
-                    hotel: hotelData ? {
-                        name: hotelData.name,
-                        address: hotelData.address,
-                        city: hotelData.city,
-                        images: hotelData.images,
+                    ...booking,
+                    id: booking._id.toString(),
+                    hotel: hotel ? {
+                        name: hotel.name,
+                        address: hotel.address,
+                        city: hotel.city,
+                        images: hotel.images,
                     } : null,
                 };
             })
         );
 
-        return bookings;
+        return bookingsWithHotels;
     }
 
     /**
      * Get booking by ID
      */
     async getBookingById(id: string) {
-        const bookingDoc = await this.collection.doc(id).get();
+        const booking = await Booking.findById(id).lean();
+        if (!booking) return null;
 
-        if (!bookingDoc.exists) {
-            return null;
-        }
-
-        const bookingData = bookingDoc.data();
-
-        // Fetch hotel data
-        const hotelDoc = await db.collection('hotels').doc(bookingData?.hotelId).get();
-        const hotelData = hotelDoc.exists ? hotelDoc.data() : null;
-
-        // Fetch user data
-        const userDoc = await db.collection('users').doc(bookingData?.userId).get();
-        const userData = userDoc.exists ? userDoc.data() : null;
+        const [hotel, user] = await Promise.all([
+            Hotel.findById(booking.hotelId).lean(),
+            User.findById(booking.userId).lean(),
+        ]);
 
         return {
-            id: bookingDoc.id,
-            ...bookingData,
-            hotel: hotelData,
-            user: userData ? {
-                name: userData.name,
-                email: userData.email,
-            } : null,
+            ...booking,
+            id: booking._id.toString(),
+            hotel: hotel ? { ...hotel, id: hotel._id.toString() } : null,
+            user: user ? { name: user.name, email: user.email } : null,
         };
     }
 
@@ -202,26 +160,21 @@ export class BookingService {
      * Update booking status
      */
     async updateBookingStatus(id: string, status: BookingStatus) {
-        await this.collection.doc(id).update({ status });
-        const updated = await this.collection.doc(id).get();
-        return {
-            id: updated.id,
-            ...updated.data(),
-        };
+        const updated = await Booking.findByIdAndUpdate(id, { status }, { new: true }).lean();
+        return { ...updated, id: updated?._id.toString() };
     }
 
     /**
      * Cancel a booking
      */
     async cancelBooking(id: string, userId: string) {
-        const bookingDoc = await this.collection.doc(id).get();
+        const booking = await Booking.findById(id).lean();
 
-        if (!bookingDoc.exists) {
+        if (!booking) {
             throw new ValidationError('Booking not found');
         }
 
-        const bookingData = bookingDoc.data();
-        if (bookingData?.userId !== userId) {
+        if (booking.userId !== userId) {
             throw new ValidationError('Unauthorized to cancel this booking');
         }
 

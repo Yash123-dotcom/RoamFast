@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import ownerService from '@/services/owner.service';
 import { asyncHandler } from '@/utils/asyncHandler';
 import { HTTP_STATUS } from '@/config/constants';
+import { AuthRequest } from '@/middleware/auth';
 
 class OwnerController {
     /**
@@ -13,8 +14,8 @@ class OwnerController {
         // For demo/prototype, we might trust a header or query param if auth isn't fully set up for owners
         // But since we have auth middleware, let's try to use it.
 
-        // @ts-ignore - Assuming auth middleware populates req.user
-        const userId = req.user?.id;
+        const authReq = req as AuthRequest;
+        const userId = authReq.user?.id;
 
         // Temporarily disabled for UI testing
         // if (!userId) {
@@ -33,8 +34,8 @@ class OwnerController {
      * GET /api/v1/owner/analytics
      */
     getDashboardAnalytics = asyncHandler(async (req: Request, res: Response) => {
-        // @ts-ignore
-        const userId = req.user?.id;
+        const authReq = req as AuthRequest;
+        const userId = authReq.user?.id;
 
         // Temporarily disabled for UI testing
         // if (!userId) {

@@ -1,4 +1,8 @@
-import { db } from '@/config/firebase';
+import { Hotel } from '@/models/Hotel';
+import { Room } from '@/models/Room';
+import { Review } from '@/models/Review';
+import { User } from '@/models/User';
+import { FeaturedListing } from '@/models/FeaturedListing';
 import { NotFoundError } from '@/utils/errors';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/config/constants';
 
@@ -12,11 +16,9 @@ export interface SearchOptions {
 }
 
 /**
- * Hotel Service - Data access layer for hotels using Firestore
+ * Hotel Service - Data access layer for hotels using Mongoose
  */
 export class HotelService {
-    private collection = db.collection('hotels');
-
     /**
      * Search hotels by city or name with pagination
      */
@@ -25,52 +27,33 @@ export class HotelService {
         const limit = Math.min(options.limit || DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
         const skip = (page - 1) * limit;
 
-        let hotelQuery = this.collection.where('status', '==', 'APPROVED');
+        const filter: Record<string, any> = { status: 'APPROVED' };
 
-        // City or name search
         if (query) {
-            // Firestore doesn't support OR queries directly, so we'll do client-side filtering
-            // Or create separate queries for city and name
-            hotelQuery = hotelQuery.where('city', '>=', query).where('city', '<=', query + '\uf8ff');
+            filter.$or = [
+                { city: { $regex: query, $options: 'i' } },
+                { name: { $regex: query, $options: 'i' } },
+            ];
         }
 
-        // Price filters
-        if (options.minPrice !== undefined) {
-            hotelQuery = hotelQuery.where('price', '>=', options.minPrice);
-        }
-        if (options.maxPrice !== undefined) {
-            hotelQuery = hotelQuery.where('price', '<=', options.maxPrice);
-        }
+        if (options.minPrice !== undefined) filter.price = { ...filter.price, $gte: options.minPrice };
+        if (options.maxPrice !== undefined) filter.price = { ...filter.price, $lte: options.maxPrice };
 
-        // Sorting
-        if (options.sortBy === 'price_asc') {
-            hotelQuery = hotelQuery.orderBy('price', 'asc');
-        } else if (options.sortBy === 'price_desc') {
-            hotelQuery = hotelQuery.orderBy('price', 'desc');
-        } else if (options.sortBy === 'rating') {
-            hotelQuery = hotelQuery.orderBy('rating', 'desc');
-        } else {
-            hotelQuery = hotelQuery.orderBy('price', 'asc');
-        }
+        let sortOption: Record<string, 1 | -1> = { price: 1 };
+        if (options.sortBy === 'price_asc') sortOption = { price: 1 };
+        else if (options.sortBy === 'price_desc') sortOption = { price: -1 };
+        else if (options.sortBy === 'rating') sortOption = { rating: -1 };
 
-        // Get all matching documents first (for total count)
-        const snapshot = await hotelQuery.get();
-        const total = snapshot.size;
-
-        // Apply pagination manually
-        const hotels = snapshot.docs
-            .slice(skip, skip + limit)
-            .map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-            }));
+        const [hotels, total] = await Promise.all([
+            Hotel.find(filter).sort(sortOption).skip(skip).limit(limit).lean(),
+            Hotel.countDocuments(filter),
+        ]);
 
         // Fetch rooms for each hotel
         const hotelsWithRooms = await Promise.all(
             hotels.map(async (hotel) => {
-                const roomsSnapshot = await db.collection('rooms').where('hotelId', '==', hotel.id).get();
-                const rooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                return { ...hotel, rooms };
+                const rooms = await Room.find({ hotelId: hotel._id.toString() }).lean();
+                return { ...hotel, id: hotel._id.toString(), rooms: rooms.map(r => ({ ...r, id: r._id.toString() })) };
             })
         );
 
@@ -89,41 +72,33 @@ export class HotelService {
      * Get hotel by ID with relations
      */
     async getHotelById(id: string) {
-        const hotelDoc = await this.collection.doc(id).get();
+        const hotel = await Hotel.findById(id).lean();
 
-        if (!hotelDoc.exists) {
+        if (!hotel) {
             throw new NotFoundError('Hotel not found');
         }
 
-        const hotel = { id: hotelDoc.id, ...hotelDoc.data() };
+        const [rooms, reviews] = await Promise.all([
+            Room.find({ hotelId: id }).lean(),
+            Review.find({ hotelId: id }).sort({ createdAt: -1 }).lean(),
+        ]);
 
-        // Fetch rooms
-        const roomsSnapshot = await db.collection('rooms').where('hotelId', '==', id).get();
-        const rooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        // Fetch reviews with user data
-        const reviewsSnapshot = await db.collection('reviews')
-            .where('hotelId', '==', id)
-            .orderBy('createdAt', 'desc')
-            .get();
-
-        const reviews = await Promise.all(
-            reviewsSnapshot.docs.map(async (doc) => {
-                const reviewData = doc.data();
-                const userDoc = await db.collection('users').doc(reviewData.userId).get();
-                const userData = userDoc.exists ? userDoc.data() : null;
+        const reviewsWithUsers = await Promise.all(
+            reviews.map(async (review) => {
+                const user = await User.findById(review.userId).lean();
                 return {
-                    id: doc.id,
-                    ...reviewData,
-                    user: userData ? { name: userData.name, image: userData.image } : null,
+                    ...review,
+                    id: review._id.toString(),
+                    user: user ? { name: user.name, image: user.image } : null,
                 };
             })
         );
 
         return {
             ...hotel,
-            rooms,
-            reviews,
+            id: hotel._id.toString(),
+            rooms: rooms.map(r => ({ ...r, id: r._id.toString() })),
+            reviews: reviewsWithUsers,
         };
     }
 
@@ -140,21 +115,16 @@ export class HotelService {
         amenities: string[];
         ownerId?: string;
     }) {
-        const hotelData = {
+        const hotel = await new Hotel({
             ...data,
             rating: 0,
             qualityScore: 0,
             status: 'PENDING',
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        };
-
-        const docRef = await this.collection.add(hotelData);
-        const created = await docRef.get();
+        }).save();
 
         return {
-            id: created.id,
-            ...created.data(),
+            ...hotel.toObject(),
+            id: hotel._id.toString(),
             rooms: [],
         };
     }
@@ -171,27 +141,18 @@ export class HotelService {
         images: string[];
         amenities: string[];
     }>) {
-        const hotelDoc = await this.collection.doc(id).get();
+        const hotel = await Hotel.findByIdAndUpdate(id, data, { new: true }).lean();
 
-        if (!hotelDoc.exists) {
+        if (!hotel) {
             throw new NotFoundError('Hotel not found');
         }
 
-        await this.collection.doc(id).update({
-            ...data,
-            updatedAt: new Date(),
-        });
-
-        const updated = await this.collection.doc(id).get();
-
-        // Fetch rooms for consistency
-        const roomsSnapshot = await db.collection('rooms').where('hotelId', '==', id).get();
-        const rooms = roomsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const rooms = await Room.find({ hotelId: id }).lean();
 
         return {
-            id: updated.id,
-            ...updated.data(),
-            rooms,
+            ...hotel,
+            id: hotel._id.toString(),
+            rooms: rooms.map(r => ({ ...r, id: r._id.toString() })),
         };
     }
 
@@ -199,39 +160,38 @@ export class HotelService {
      * Get featured listings by city
      */
     async getFeaturedListings(city?: string) {
-        let query = db.collection('featuredListings')
-            .where('active', '==', true)
-            .where('endDate', '>', new Date());
+        const filter: Record<string, any> = {
+            active: true,
+            endDate: { $gt: new Date() },
+        };
 
-        if (city) {
-            query = query.where('city', '==', city);
-        }
+        if (city) filter.city = city;
 
-        const snapshot = await query.orderBy('position', 'asc').limit(5).get();
+        const listings = await FeaturedListing.find(filter)
+            .sort({ position: 1 })
+            .limit(5)
+            .lean();
 
-        const listings = await Promise.all(
-            snapshot.docs.map(async (doc) => {
-                const listingData = doc.data();
-                const hotelDoc = await this.collection.doc(listingData.hotelId).get();
-                const hotelData = hotelDoc.exists ? hotelDoc.data() : null;
+        const listingsWithHotels = await Promise.all(
+            listings.map(async (listing) => {
+                const hotel = await Hotel.findById(listing.hotelId).lean();
+                if (!hotel) return { ...listing, id: listing._id.toString(), hotel: null };
 
-                // Fetch rooms for the hotel
-                const roomsSnapshot = await db.collection('rooms').where('hotelId', '==', listingData.hotelId).get();
-                const rooms = roomsSnapshot.docs.map(roomDoc => ({ id: roomDoc.id, ...roomDoc.data() }));
+                const rooms = await Room.find({ hotelId: listing.hotelId }).lean();
 
                 return {
-                    id: doc.id,
-                    ...listingData,
-                    hotel: hotelData ? {
-                        id: hotelDoc.id,
-                        ...hotelData,
-                        rooms,
-                    } : null,
+                    ...listing,
+                    id: listing._id.toString(),
+                    hotel: {
+                        ...hotel,
+                        id: hotel._id.toString(),
+                        rooms: rooms.map(r => ({ ...r, id: r._id.toString() })),
+                    },
                 };
             })
         );
 
-        return listings;
+        return listingsWithHotels;
     }
 }
 

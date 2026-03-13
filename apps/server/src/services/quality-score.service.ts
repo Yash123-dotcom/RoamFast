@@ -1,4 +1,5 @@
-import { db } from '@/config/firebase';
+import { Hotel } from '@/models/Hotel';
+import { Review } from '@/models/Review';
 
 /**
  * RoamFast Quality Score Service
@@ -26,27 +27,22 @@ export class QualityScoreService {
      * Calculate Quality Score for a hotel
      */
     async calculateQualityScore(hotelId: string): Promise<number> {
-        const hotelDoc = await db.collection('hotels').doc(hotelId).get();
+        const hotel = await Hotel.findById(hotelId).lean();
 
-        if (!hotelDoc.exists) {
+        if (!hotel) {
             throw new Error('Hotel not found');
         }
 
-        const reviewsSnapshot = await db.collection('reviews')
-            .where('hotelId', '==', hotelId)
-            .where('verified', '==', true)
-            .orderBy('createdAt', 'desc')
-            .limit(50)
-            .get();
+        const reviews = await Review.find({
+            hotelId,
+            verified: true,
+        }).sort({ createdAt: -1 }).limit(50).lean();
 
-        const reviews = reviewsSnapshot.docs.map(doc => doc.data());
-        const hotelData = hotelDoc.data();
-
-        const breakdown = await this.calculateBreakdown({ ...hotelData, reviews });
+        const breakdown = await this.calculateBreakdown({ ...hotel, reviews });
         const score = this.computeWeightedScore(breakdown);
 
         // Update hotel with new score
-        await db.collection('hotels').doc(hotelId).update({
+        await Hotel.findByIdAndUpdate(hotelId, {
             qualityScore: score,
             scoreBreakdown: JSON.stringify(breakdown),
             lastScoreUpdate: new Date(),
@@ -64,26 +60,23 @@ export class QualityScoreService {
         // Cleanliness: Average of cleanliness ratings (scaled to 100)
         const cleanliness = reviews.length > 0
             ? (reviews.reduce((sum: number, r: any) => sum + r.cleanliness, 0) / reviews.length / 5) * 100
-            : 80; // Default for new properties
+            : 80;
 
         // Service: Average of staff experience ratings
         const service = reviews.length > 0
             ? (reviews.reduce((sum: number, r: any) => sum + r.staffExperience, 0) / reviews.length / 5) * 100
             : 80;
 
-        // Amenities: Based on number and quality of amenities
-        // Use amenities count directly from hotel data if available in array format
-        const amenitiesList = Array.isArray(hotel.amenities) ? hotel.amenities : [];
-        const amenitiesCount = amenitiesList.length;
-        const amenities = Math.min(100, (amenitiesCount / 15) * 100); // 15+ amenities = 100
+        // Amenities: Based on count
+        const amenitiesCount = Array.isArray(hotel.amenities) ? hotel.amenities.length : 0;
+        const amenities = Math.min(100, (amenitiesCount / 15) * 100);
 
         // Feedback: Average overall ratings from verified reviews
         const feedback = reviews.length > 0
             ? (reviews.reduce((sum: number, r: any) => sum + r.overallRating, 0) / reviews.length / 5) * 100
             : 75;
 
-        // Responsiveness: Mock calculation (in production, track owner response times)
-        // For now, use a baseline score that degrades if reviews are negative
+        // Responsiveness: Baseline calculation
         const responsiveness = reviews.length > 0 && feedback > 80 ? 90 : 70;
 
         return {
@@ -122,12 +115,10 @@ export class QualityScoreService {
      * Recalculate scores for all hotels
      */
     async recalculateAllScores(): Promise<void> {
-        const hotelsSnapshot = await db.collection('hotels')
-            .where('status', '==', 'APPROVED')
-            .get();
+        const hotels = await Hotel.find({ status: 'APPROVED' }).lean();
 
-        for (const doc of hotelsSnapshot.docs) {
-            await this.calculateQualityScore(doc.id);
+        for (const hotel of hotels) {
+            await this.calculateQualityScore(hotel._id.toString());
         }
     }
 }

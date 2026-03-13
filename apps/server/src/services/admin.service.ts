@@ -1,4 +1,8 @@
-import { db } from '@/config/firebase';
+import { Hotel } from '@/models/Hotel';
+import { User } from '@/models/User';
+import { Booking } from '@/models/Booking';
+import { Commission } from '@/models/Commission';
+import { Subscription } from '@/models/Subscription';
 import { HotelStatus } from '@/constants/enums';
 import emailService from './email.service';
 import { logger } from '@/utils/logger';
@@ -8,85 +12,62 @@ export class AdminService {
      * Get all hotels requiring approval
      */
     async getPendingHotels() {
-        const hotelsSnapshot = await db.collection('hotels')
-            .where('status', '==', HotelStatus.PENDING)
-            .orderBy('createdAt', 'asc')
-            .get();
+        const hotels = await Hotel.find({ status: HotelStatus.PENDING }).sort({ createdAt: 1 }).lean();
 
-        const hotels = await Promise.all(
-            hotelsSnapshot.docs.map(async (doc) => {
-                const hotelData = doc.data();
-
-                // Fetch owner data
+        const result = await Promise.all(
+            hotels.map(async (hotel) => {
                 let owner = null;
-                if (hotelData.ownerId) {
-                    const ownerDoc = await db.collection('users').doc(hotelData.ownerId).get();
-                    if (ownerDoc.exists) {
-                        const ownerData = ownerDoc.data();
-                        owner = { name: ownerData?.name, email: ownerData?.email };
-                    }
+                if (hotel.ownerId) {
+                    const ownerDoc = await User.findById(hotel.ownerId).lean();
+                    if (ownerDoc) owner = { name: ownerDoc.name, email: ownerDoc.email };
                 }
 
-                // Fetch active subscription
-                const subscriptionSnapshot = await db.collection('subscriptions')
-                    .where('hotelId', '==', doc.id)
-                    .where('active', '==', true)
-                    .limit(1)
-                    .get();
-
-                const subscriptions = subscriptionSnapshot.docs.map(subDoc => ({
-                    id: subDoc.id,
-                    ...subDoc.data(),
-                }));
+                const subscriptions = await Subscription.find({
+                    hotelId: hotel._id.toString(),
+                    active: true,
+                }).limit(1).lean();
 
                 return {
-                    id: doc.id,
-                    ...hotelData,
+                    ...hotel,
+                    id: hotel._id.toString(),
                     owner,
-                    subscriptions,
+                    subscriptions: subscriptions.map(s => ({ ...s, id: s._id.toString() })),
                 };
             })
         );
 
-        return hotels;
+        return result;
     }
 
     /**
      * Approve a hotel listing
      */
     async approveHotel(hotelId: string) {
-        const hotelDoc = await db.collection('hotels').doc(hotelId).get();
-        if (!hotelDoc.exists) {
-            throw new Error('Hotel not found');
-        }
+        const hotel = await Hotel.findByIdAndUpdate(
+            hotelId,
+            { status: HotelStatus.APPROVED },
+            { new: false }
+        ).lean();
 
-        await db.collection('hotels').doc(hotelId).update({
-            status: HotelStatus.APPROVED,
-            updatedAt: new Date(),
-        });
+        if (!hotel) throw new Error('Hotel not found');
 
-        const hotelData = hotelDoc.data();
-
-        // Fetch owner data
         let owner = null;
-        if (hotelData?.ownerId) {
-            const ownerDoc = await db.collection('users').doc(hotelData.ownerId).get();
-            if (ownerDoc.exists) {
-                owner = ownerDoc.data();
-            }
+        if (hotel.ownerId) {
+            const ownerDoc = await User.findById(hotel.ownerId).lean();
+            if (ownerDoc) owner = ownerDoc;
         }
 
-        if (owner && owner.email) {
+        if (owner && (owner as any).email) {
             await emailService.sendHotelApprovalNotification(
-                owner.email,
-                owner.name || 'Partner',
-                hotelData?.name || 'Hotel'
+                (owner as any).email,
+                (owner as any).name || 'Partner',
+                hotel.name
             );
         }
 
         return {
-            id: hotelId,
-            ...hotelData,
+            ...hotel,
+            id: hotel._id.toString(),
             status: HotelStatus.APPROVED,
             owner,
         };
@@ -96,66 +77,53 @@ export class AdminService {
      * Reject a hotel listing
      */
     async rejectHotel(hotelId: string) {
-        await db.collection('hotels').doc(hotelId).update({
-            status: HotelStatus.REJECTED,
-            updatedAt: new Date(),
-        });
+        const updated = await Hotel.findByIdAndUpdate(
+            hotelId,
+            { status: HotelStatus.REJECTED },
+            { new: true }
+        ).lean();
 
-        const updated = await db.collection('hotels').doc(hotelId).get();
-        return {
-            id: updated.id,
-            ...updated.data(),
-        };
+        return { ...updated, id: updated?._id.toString() };
     }
 
     async getPlatformStats() {
-        const [usersSnapshot, hotelsSnapshot, bookingsSnapshot, commissionsSnapshot] = await Promise.all([
-            db.collection('users').get(),
-            db.collection('hotels').where('status', '==', HotelStatus.APPROVED).get(),
-            db.collection('bookings').get(),
-            db.collection('commissions').get(),
+        const [totalUsers, totalHotels, totalBookings, commissions] = await Promise.all([
+            User.countDocuments(),
+            Hotel.countDocuments({ status: HotelStatus.APPROVED }),
+            Booking.countDocuments(),
+            Commission.find().lean(),
         ]);
 
-        let totalRevenue = 0;
-        commissionsSnapshot.docs.forEach(doc => {
-            const data = doc.data();
-            totalRevenue += (data.commissionAmount || 0) + (data.platformFee || 0);
-        });
+        const totalRevenue = commissions.reduce(
+            (sum, c) => sum + (c.commissionAmount || 0) + (c.platformFee || 0),
+            0
+        );
 
-        return {
-            totalUsers: usersSnapshot.size,
-            totalHotels: hotelsSnapshot.size,
-            totalBookings: bookingsSnapshot.size,
-            totalRevenue,
-        };
+        return { totalUsers, totalHotels, totalBookings, totalRevenue };
     }
 
     /**
      * Get all commission payouts
      */
     async getPayouts() {
-        const commissionsSnapshot = await db.collection('commissions')
-            .orderBy('createdAt', 'desc')
-            .get();
+        const commissions = await Commission.find().sort({ createdAt: -1 }).lean();
 
         const payouts = await Promise.all(
-            commissionsSnapshot.docs.map(async (doc) => {
-                const commissionData = doc.data();
-                const bookingDoc = await db.collection('bookings').doc(commissionData.bookingId).get();
-                const bookingData = bookingDoc.exists ? bookingDoc.data() : null;
-
+            commissions.map(async (comm) => {
+                const booking = await Booking.findById(comm.bookingId).lean();
                 let hotelName = null;
-                if (bookingData?.hotelId) {
-                    const hotelDoc = await db.collection('hotels').doc(bookingData.hotelId).get();
-                    hotelName = hotelDoc.exists ? hotelDoc.data()?.name : null;
+
+                if (booking?.hotelId) {
+                    const hotel = await Hotel.findById(booking.hotelId).lean();
+                    hotelName = hotel?.name ?? null;
                 }
 
                 return {
-                    id: doc.id,
-                    ...commissionData,
-                    booking: bookingData ? {
-                        id: bookingDoc.id,
-                        totalPrice: bookingData.totalPrice,
+                    ...comm,
+                    id: comm._id.toString(),
+                    booking: booking ? {
+                        id: booking._id.toString(),
+                        totalPrice: booking.totalPrice,
                         hotel: { name: hotelName },
                     } : null,
                 };
@@ -170,20 +138,19 @@ export class AdminService {
      */
     async getRevenueAnalytics() {
         try {
-            const commissionsSnapshot = await db.collection('commissions').get();
+            const allCommissions = await Commission.find().lean();
 
             let totalCommissions = 0;
             let totalPlatformFees = 0;
             let totalHotelPayouts = 0;
             const payoutsByStatus: any = {};
 
-            commissionsSnapshot.docs.forEach(doc => {
-                const data = doc.data();
-                totalCommissions += data.commissionAmount || 0;
-                totalPlatformFees += data.platformFee || 0;
-                totalHotelPayouts += data.hotelPayout || 0;
+            allCommissions.forEach(c => {
+                totalCommissions += c.commissionAmount || 0;
+                totalPlatformFees += c.platformFee || 0;
+                totalHotelPayouts += c.hotelPayout || 0;
 
-                const status = data.status || 'PENDING';
+                const status = c.status || 'PENDING';
                 if (!payoutsByStatus[status]) {
                     payoutsByStatus[status] = {
                         status,
@@ -191,42 +158,39 @@ export class AdminService {
                         _count: 0,
                     };
                 }
-                payoutsByStatus[status]._sum.commissionAmount += data.commissionAmount || 0;
-                payoutsByStatus[status]._sum.platformFee += data.platformFee || 0;
+                payoutsByStatus[status]._sum.commissionAmount += c.commissionAmount || 0;
+                payoutsByStatus[status]._sum.platformFee += c.platformFee || 0;
                 payoutsByStatus[status]._count++;
             });
 
             // Recent transactions (last 10)
-            const recentCommissionsSnapshot = await db.collection('commissions')
-                .orderBy('createdAt', 'desc')
+            const recentCommissions = await Commission.find()
+                .sort({ createdAt: -1 })
                 .limit(10)
-                .get();
+                .lean();
 
             const recentTransactions = await Promise.all(
-                recentCommissionsSnapshot.docs.map(async (doc) => {
-                    const commData = doc.data();
-                    const bookingDoc = await db.collection('bookings').doc(commData.bookingId).get();
-                    const bookingData = bookingDoc.exists ? bookingDoc.data() : null;
-
-                    // Fetch related data
+                recentCommissions.map(async (comm) => {
+                    const booking = await Booking.findById(comm.bookingId).lean();
                     let user = null, hotel = null;
-                    if (bookingData) {
+
+                    if (booking) {
                         const [userDoc, hotelDoc] = await Promise.all([
-                            db.collection('users').doc(bookingData.userId).get(),
-                            db.collection('hotels').doc(bookingData.hotelId).get(),
+                            User.findById(booking.userId).lean(),
+                            Hotel.findById(booking.hotelId).lean(),
                         ]);
-                        user = userDoc.exists ? { name: userDoc.data()?.name, email: userDoc.data()?.email } : null;
-                        hotel = hotelDoc.exists ? { name: hotelDoc.data()?.name, city: hotelDoc.data()?.city } : null;
+                        user = userDoc ? { name: userDoc.name, email: userDoc.email } : null;
+                        hotel = hotelDoc ? { name: hotelDoc.name, city: hotelDoc.city } : null;
                     }
 
                     return {
-                        id: doc.id,
-                        ...commData,
-                        booking: bookingData ? {
-                            id: bookingDoc.id,
-                            checkIn: bookingData.checkIn,
-                            checkOut: bookingData.checkOut,
-                            totalPrice: bookingData.totalPrice,
+                        ...comm,
+                        id: comm._id.toString(),
+                        booking: booking ? {
+                            id: booking._id.toString(),
+                            checkIn: booking.checkIn,
+                            checkOut: booking.checkOut,
+                            totalPrice: booking.totalPrice,
                             user,
                             hotel,
                         } : null,
@@ -239,22 +203,21 @@ export class AdminService {
             startOfMonth.setDate(1);
             startOfMonth.setHours(0, 0, 0, 0);
 
-            const monthlyCommissionsSnapshot = await db.collection('commissions')
-                .where('createdAt', '>=', startOfMonth)
-                .get();
+            const monthlyCommissions = await Commission.find({
+                createdAt: { $gte: startOfMonth },
+            }).lean();
 
-            let monthlyRevenue = 0;
-            monthlyCommissionsSnapshot.docs.forEach(doc => {
-                const data = doc.data();
-                monthlyRevenue += (data.commissionAmount || 0) + (data.platformFee || 0);
-            });
+            const monthlyRevenue = monthlyCommissions.reduce(
+                (sum, c) => sum + (c.commissionAmount || 0) + (c.platformFee || 0),
+                0
+            );
 
             return {
                 totalRevenue: totalCommissions + totalPlatformFees,
                 totalCommissions,
                 totalPlatformFees,
                 totalHotelPayouts,
-                transactionCount: commissionsSnapshot.size,
+                transactionCount: allCommissions.length,
                 payoutsByStatus: Object.values(payoutsByStatus),
                 recentTransactions,
                 monthlyRevenue,

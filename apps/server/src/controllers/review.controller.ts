@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import reviewService from '@/services/review.service';
 import { asyncHandler } from '@/utils/asyncHandler';
 import { HTTP_STATUS } from '@/config/constants';
+import { AuthRequest } from '@/middleware/auth';
 
 class ReviewController {
     /**
@@ -19,8 +20,8 @@ class ReviewController {
             travelerType,
             comment
         } = req.body;
-        // @ts-ignore
-        const userId = req.user?.id;
+        const authReq = req as AuthRequest;
+        const userId = authReq.user?.id;
 
         if (!userId) {
             res.status(HTTP_STATUS.UNAUTHORIZED).json({ message: 'Unauthorized' });

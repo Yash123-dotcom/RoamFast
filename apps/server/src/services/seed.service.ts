@@ -1,8 +1,12 @@
-import { db, auth } from '@/config/firebase';
+import { Hotel } from '@/models/Hotel';
+import { Room } from '@/models/Room';
+import { User } from '@/models/User';
+import { Booking } from '@/models/Booking';
+import { Commission } from '@/models/Commission';
 import { logger } from '@/utils/logger';
 
 /**
- * Seed Service - Database seeding operations
+ * Seed Service - Database seeding operations using Mongoose
  */
 export class SeedService {
     /**
@@ -12,33 +16,19 @@ export class SeedService {
         logger.info('🌱 Starting database seed...');
 
         try {
-            // Create demo user
-            // Note: Firebase Admin Auth createUser might fail if user exists, so we handle that
-            let demoUserId;
-            try {
-                const userRecord = await auth.createUser({
+            // Create or find demo user
+            let demoUser = await User.findOne({ email: 'demo@neonstay.com' }).lean();
+
+            if (!demoUser) {
+                const created = await new User({
                     email: 'demo@neonstay.com',
-                    emailVerified: true,
-                    password: 'password123',
-                    displayName: 'Demo User',
-                });
-                demoUserId = userRecord.uid;
-            } catch (error: any) {
-                if (error.code === 'auth/email-already-exists') {
-                    const userRecord = await auth.getUserByEmail('demo@neonstay.com');
-                    demoUserId = userRecord.uid;
-                } else {
-                    throw error;
-                }
+                    name: 'Demo User',
+                    role: 'ADMIN',
+                }).save();
+                demoUser = created.toObject();
             }
 
-            // Create/Update user doc in Firestore
-            await db.collection('users').doc(demoUserId).set({
-                email: 'demo@neonstay.com',
-                name: 'Demo User',
-                role: 'ADMIN',
-                createdAt: new Date(),
-            }, { merge: true });
+            const demoUserId = (demoUser as any)._id.toString();
 
             const realHotels = [
                 {
@@ -115,37 +105,31 @@ export class SeedService {
 
             let createdCount = 0;
 
-            for (const hotel of realHotels) {
-                // Check if hotel exists by name
-                const snapshot = await db.collection('hotels').where('name', '==', hotel.name).get();
+            for (const hotelData of realHotels) {
+                const existing = await Hotel.findOne({ name: hotelData.name }).lean();
 
-                if (snapshot.empty) {
-                    const hotelData = {
-                        ...hotel,
+                if (!existing) {
+                    const hotel = await new Hotel({
+                        ...hotelData,
                         ownerId: demoUserId,
                         status: 'APPROVED',
-                        createdAt: new Date(),
-                        updatedAt: new Date(),
-                    };
-
-                    const docRef = await db.collection('hotels').add(hotelData);
+                    }).save();
 
                     // Create rooms
-                    await db.collection('rooms').add({
-                        type: "Deluxe King",
-                        price: hotel.price,
-                        capacity: 2,
-                        hotelId: docRef.id,
-                        createdAt: new Date(),
-                    });
-
-                    await db.collection('rooms').add({
-                        type: "Luxury Suite",
-                        price: Math.round(hotel.price * 1.5),
-                        capacity: 3,
-                        hotelId: docRef.id,
-                        createdAt: new Date(),
-                    });
+                    await Promise.all([
+                        new Room({
+                            type: "Deluxe King",
+                            price: hotelData.price,
+                            capacity: 2,
+                            hotelId: hotel._id.toString(),
+                        }).save(),
+                        new Room({
+                            type: "Luxury Suite",
+                            price: Math.round(hotelData.price * 1.5),
+                            capacity: 3,
+                            hotelId: hotel._id.toString(),
+                        }).save(),
+                    ]);
 
                     createdCount++;
                 }
@@ -161,10 +145,6 @@ export class SeedService {
             };
         } catch (error) {
             logger.error('Seed failed:', error);
-            logger.error('Error details:', {
-                message: error instanceof Error ? error.message : 'Unknown error',
-                stack: error instanceof Error ? error.stack : undefined
-            });
             throw error;
         }
     }
@@ -176,40 +156,24 @@ export class SeedService {
         logger.info('💰 Starting commission data seed...');
 
         try {
-            // Get demo user ID
-            const demoUserUser = await db.collection('users').where('email', '==', 'demo@neonstay.com').get();
-            const demoUserId = !demoUserUser.empty ? demoUserUser.docs[0].id : null;
+            const demoUser = await User.findOne({ email: 'demo@neonstay.com' }).lean();
+            if (!demoUser) return;
+            const demoUserId = (demoUser as any)._id.toString();
 
-            if (!demoUserId) return;
+            const hotels = await Hotel.find({ status: 'APPROVED' }).limit(5).lean();
 
-            // Create sample users (or just get IDs if we want to be real lazy, we can make fake IDs)
-            const guestEmails = ['guest1@example.com', 'guest2@example.com', 'guest3@example.com'];
-            const guestIds = [];
-
-            for (const email of guestEmails) {
-                // Simplified: assume they exist or just generate ID
-                // For realistic data, we should probably create them in Auth/Firestore
-                guestIds.push(email.replace('@example.com', '_id'));
-            }
-
-            // Get hotels
-            const hotelsSnapshot = await db.collection('hotels').where('status', '==', 'APPROVED').limit(5).get();
-            const hotels = hotelsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-            if (hotels.length === 0) {
-                return;
-            }
+            if (hotels.length === 0) return;
 
             let bookingsCreated = 0;
             let commissionsCreated = 0;
 
             const bookingData = [
-                { userId: guestIds[0], hotelId: hotels[0].id, price: 25000, status: 'PAID', daysAgo: 5 },
-                { userId: guestIds[1], hotelId: hotels[1]?.id || hotels[0].id, price: 45000, status: 'PAID', daysAgo: 3 },
-                { userId: guestIds[2], hotelId: hotels[2]?.id || hotels[0].id, price: 38000, status: 'PENDING', daysAgo: 1 },
-                { userId: guestIds[0], hotelId: hotels[3]?.id || hotels[0].id, price: 85000, status: 'PAID', daysAgo: 10 },
-                { userId: guestIds[1], hotelId: hotels[4]?.id || hotels[0].id, price: 95000, status: 'PENDING', daysAgo: 2 },
-                { userId: guestIds[2], hotelId: hotels[0].id, price: 32000, status: 'FAILED', daysAgo: 7 },
+                { userId: demoUserId, hotelIdx: 0, price: 25000, status: 'PAID', daysAgo: 5 },
+                { userId: demoUserId, hotelIdx: 1, price: 45000, status: 'PAID', daysAgo: 3 },
+                { userId: demoUserId, hotelIdx: 2, price: 38000, status: 'PENDING', daysAgo: 1 },
+                { userId: demoUserId, hotelIdx: 3, price: 85000, status: 'PAID', daysAgo: 10 },
+                { userId: demoUserId, hotelIdx: 4, price: 95000, status: 'PENDING', daysAgo: 2 },
+                { userId: demoUserId, hotelIdx: 0, price: 32000, status: 'FAILED', daysAgo: 7 },
             ];
 
             for (const data of bookingData) {
@@ -218,37 +182,36 @@ export class SeedService {
                 const checkOutDate = new Date(checkInDate);
                 checkOutDate.setDate(checkOutDate.getDate() + 3);
 
-                // Create Booking
-                const bookingRef = await db.collection('bookings').add({
+                const hotel = hotels[data.hotelIdx] || hotels[0];
+                const hotelId = hotel._id.toString();
+
+                const booking = await new Booking({
                     userId: data.userId,
-                    hotelId: data.hotelId,
+                    hotelId,
                     checkIn: checkInDate,
                     checkOut: checkOutDate,
                     totalPrice: data.price,
                     status: 'CONFIRMED',
                     paymentStatus: 'succeeded',
                     paymentIntentId: `pi_demo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                    createdAt: new Date(),
-                });
+                }).save();
 
                 bookingsCreated++;
 
-                // Create commission record
                 const commissionRate = 12.5;
                 const platformFee = 500;
                 const commissionAmount = Math.round(data.price * (commissionRate / 100));
                 const hotelPayout = data.price - commissionAmount - platformFee;
 
-                await db.collection('commissions').add({
-                    bookingId: bookingRef.id,
+                await new Commission({
+                    bookingId: booking._id.toString(),
                     commissionRate,
                     commissionAmount,
                     platformFee,
                     hotelPayout,
                     status: data.status,
                     paidAt: data.status === 'PAID' ? new Date() : null,
-                    createdAt: new Date(),
-                });
+                }).save();
 
                 commissionsCreated++;
             }
@@ -259,7 +222,7 @@ export class SeedService {
                 success: true,
                 message: `Created ${bookingsCreated} bookings with ${commissionsCreated} commission records`,
                 bookingsCreated,
-                commissionsCreated
+                commissionsCreated,
             };
         } catch (error) {
             logger.error('Commission seed failed:', error);

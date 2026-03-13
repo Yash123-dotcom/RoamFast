@@ -1,8 +1,8 @@
-import { db } from '@/config/firebase';
+import { Review } from '@/models/Review';
+import { Hotel } from '@/models/Hotel';
+import { User } from '@/models/User';
 
 export class ReviewService {
-    private collection = db.collection('reviews');
-
     /**
      * Create a new review and update hotel rating
      */
@@ -18,8 +18,7 @@ export class ReviewService {
         comment: string,
         verified: boolean = false
     ) {
-        // 1. Create the review
-        const reviewData = {
+        const review = await new Review({
             userId,
             hotelId,
             overallRating,
@@ -30,26 +29,17 @@ export class ReviewService {
             travelerType,
             comment,
             verified,
-            createdAt: new Date(),
-        };
+        }).save();
 
-        const docRef = await this.collection.add(reviewData);
-        const reviewDoc = await docRef.get();
+        const user = await User.findById(userId).lean();
 
-        // Fetch user data
-        const userDoc = await db.collection('users').doc(userId).get();
-        const userData = userDoc.exists ? userDoc.data() : null;
-
-        // 2. Recalculate average rating for the hotel
+        // Recalculate average rating for the hotel
         await this.updateHotelRating(hotelId);
 
         return {
-            id: reviewDoc.id,
-            ...reviewDoc.data(),
-            user: userData ? {
-                name: userData.name,
-                image: userData.image,
-            } : null,
+            ...review.toObject(),
+            id: review._id.toString(),
+            user: user ? { name: user.name, image: user.image } : null,
         };
     }
 
@@ -57,52 +47,38 @@ export class ReviewService {
      * Get reviews for a hotel
      */
     async getHotelReviews(hotelId: string) {
-        const snapshot = await this.collection
-            .where('hotelId', '==', hotelId)
-            .orderBy('createdAt', 'desc')
-            .get();
+        const reviews = await Review.find({ hotelId }).sort({ createdAt: -1 }).lean();
 
-        const reviews = await Promise.all(
-            snapshot.docs.map(async (doc) => {
-                const reviewData = doc.data();
-                const userDoc = await db.collection('users').doc(reviewData.userId).get();
-                const userData = userDoc.exists ? userDoc.data() : null;
-
+        const reviewsWithUsers = await Promise.all(
+            reviews.map(async (review) => {
+                const user = await User.findById(review.userId).lean();
                 return {
-                    id: doc.id,
-                    ...reviewData,
-                    user: userData ? {
-                        name: userData.name,
-                        image: userData.image,
-                    } : null,
+                    ...review,
+                    id: review._id.toString(),
+                    user: user ? { name: user.name, image: user.image } : null,
                 };
             })
         );
 
-        return reviews;
+        return reviewsWithUsers;
     }
 
     /**
      * Helper: Update hotel average rating
      */
     private async updateHotelRating(hotelId: string) {
-        const reviewsSnapshot = await this.collection.where('hotelId', '==', hotelId).get();
+        const reviews = await Review.find({ hotelId }).lean();
 
-        if (reviewsSnapshot.empty) {
-            await db.collection('hotels').doc(hotelId).update({ rating: 0 });
+        if (reviews.length === 0) {
+            await Hotel.findByIdAndUpdate(hotelId, { rating: 0 });
             return;
         }
 
-        let totalRating = 0;
-        reviewsSnapshot.docs.forEach(doc => {
-            const reviewData = doc.data();
-            totalRating += reviewData.overallRating || 0;
-        });
-
-        const averageRating = totalRating / reviewsSnapshot.size;
+        const totalRating = reviews.reduce((sum, r) => sum + (r.overallRating || 0), 0);
+        const averageRating = totalRating / reviews.length;
         const roundedRating = Math.round(averageRating * 10) / 10;
 
-        await db.collection('hotels').doc(hotelId).update({ rating: roundedRating });
+        await Hotel.findByIdAndUpdate(hotelId, { rating: roundedRating });
     }
 }
 

@@ -1,4 +1,9 @@
-import { db } from '@/config/firebase';
+import { Hotel } from '@/models/Hotel';
+import { Booking } from '@/models/Booking';
+import { Review } from '@/models/Review';
+import { Subscription } from '@/models/Subscription';
+import { Commission } from '@/models/Commission';
+import { User } from '@/models/User';
 
 export class OwnerService {
     /**
@@ -6,45 +11,34 @@ export class OwnerService {
      */
     async getMyHotels(ownerId: string) {
         try {
-            const hotelsSnapshot = await db.collection('hotels')
-                .where('ownerId', '==', ownerId)
-                .orderBy('createdAt', 'desc')
-                .get();
+            const hotels = await Hotel.find({ ownerId }).sort({ createdAt: -1 }).lean();
 
-            const hotels = await Promise.all(
-                hotelsSnapshot.docs.map(async (doc) => {
-                    const hotelData = doc.data();
+            const result = await Promise.all(
+                hotels.map(async (hotel) => {
+                    const hotelId = hotel._id.toString();
 
-                    // Count bookings and reviews
-                    const [bookingsSnapshot, reviewsSnapshot, subscriptionsSnapshot] = await Promise.all([
-                        db.collection('bookings').where('hotelId', '==', doc.id).get(),
-                        db.collection('reviews').where('hotelId', '==', doc.id).get(),
-                        db.collection('subscriptions')
-                            .where('hotelId', '==', doc.id)
-                            .where('active', '==', true)
-                            .orderBy('createdAt', 'desc')
+                    const [bookingsCount, reviewsCount, subscriptions] = await Promise.all([
+                        Booking.countDocuments({ hotelId }),
+                        Review.countDocuments({ hotelId }),
+                        Subscription.find({ hotelId, active: true })
+                            .sort({ createdAt: -1 })
                             .limit(1)
-                            .get(),
+                            .lean(),
                     ]);
 
-                    const subscriptions = subscriptionsSnapshot.docs.map(subDoc => ({
-                        id: subDoc.id,
-                        ...subDoc.data(),
-                    }));
-
                     return {
-                        id: doc.id,
-                        ...hotelData,
+                        ...hotel,
+                        id: hotelId,
                         _count: {
-                            bookings: bookingsSnapshot.size,
-                            reviews: reviewsSnapshot.size,
+                            bookings: bookingsCount,
+                            reviews: reviewsCount,
                         },
-                        subscriptions,
+                        subscriptions: subscriptions.map(s => ({ ...s, id: s._id.toString() })),
                     };
                 })
             );
 
-            return hotels;
+            return result;
         } catch (error) {
             console.error('Error fetching owner hotels:', error);
             return [];
@@ -56,12 +50,8 @@ export class OwnerService {
      */
     async getOwnerAnalytics(ownerId: string) {
         try {
-            // Get all hotels
-            const hotelsSnapshot = await db.collection('hotels')
-                .where('ownerId', '==', ownerId)
-                .get();
-
-            const hotelIds = hotelsSnapshot.docs.map(doc => doc.id);
+            const hotels = await Hotel.find({ ownerId }).lean();
+            const hotelIds = hotels.map(h => h._id.toString());
 
             if (hotelIds.length === 0) {
                 return {
@@ -74,56 +64,43 @@ export class OwnerService {
             }
 
             // Aggregate Revenue from commissions
-            const commissionsSnapshot = await db.collection('commissions').get();
-
+            const allCommissions = await Commission.find().lean();
             let totalRevenue = 0;
-            for (const commDoc of commissionsSnapshot.docs) {
-                const commData = commDoc.data();
-                const bookingDoc = await db.collection('bookings').doc(commData.bookingId).get();
-                const bookingData = bookingDoc.exists ? bookingDoc.data() : null;
 
-                if (bookingData && hotelIds.includes(bookingData.hotelId) && bookingData.status === 'COMPLETED') {
-                    totalRevenue += commData.hotelPayout || 0;
+            for (const comm of allCommissions) {
+                const booking = await Booking.findById(comm.bookingId).lean();
+                if (booking && hotelIds.includes(booking.hotelId) && booking.status === 'COMPLETED') {
+                    totalRevenue += comm.hotelPayout || 0;
                 }
             }
 
             // Count bookings
-            const allBookingsSnapshot = await db.collection('bookings').get();
-            let bookingsCount = 0;
-            for (const bookingDoc of allBookingsSnapshot.docs) {
-                const bookingData = bookingDoc.data();
-                if (hotelIds.includes(bookingData.hotelId) &&
-                    ['CONFIRMED', 'COMPLETED'].includes(bookingData.status)) {
-                    bookingsCount++;
-                }
-            }
+            const bookingsCount = await Booking.countDocuments({
+                hotelId: { $in: hotelIds },
+                status: { $in: ['CONFIRMED', 'COMPLETED'] },
+            });
 
-            // Get Recent Bookings
-            const recentBookingsSnapshot = await db.collection('bookings')
-                .orderBy('createdAt', 'desc')
-                .limit(50)
-                .get();
+            // Get recent bookings
+            const recentBookingDocs = await Booking.find({ hotelId: { $in: hotelIds } })
+                .sort({ createdAt: -1 })
+                .limit(5)
+                .lean();
 
-            const recentBookings = [];
-            for (const doc of recentBookingsSnapshot.docs) {
-                const bookingData = doc.data();
-                if (hotelIds.includes(bookingData.hotelId) && recentBookings.length < 5) {
-                    const [hotelDoc, userDoc] = await Promise.all([
-                        db.collection('hotels').doc(bookingData.hotelId).get(),
-                        db.collection('users').doc(bookingData.userId).get(),
+            const recentBookings = await Promise.all(
+                recentBookingDocs.map(async (booking) => {
+                    const [hotel, user] = await Promise.all([
+                        Hotel.findById(booking.hotelId).lean(),
+                        User.findById(booking.userId).lean(),
                     ]);
 
-                    recentBookings.push({
-                        id: doc.id,
-                        ...bookingData,
-                        hotel: hotelDoc.exists ? { name: hotelDoc.data()?.name } : null,
-                        user: userDoc.exists ? {
-                            name: userDoc.data()?.name,
-                            email: userDoc.data()?.email,
-                        } : null,
-                    });
-                }
-            }
+                    return {
+                        ...booking,
+                        id: booking._id.toString(),
+                        hotel: hotel ? { name: hotel.name } : null,
+                        user: user ? { name: user.name, email: user.email } : null,
+                    };
+                })
+            );
 
             return {
                 totalRevenue,
