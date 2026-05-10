@@ -2,58 +2,48 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import Navbar from '@/components/layout/Navbar';
-import { Button } from '@/components/ui/button';
-import { CheckCircle, Calendar, MapPin, Download, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
-import confetti from 'canvas-confetti';
+import { CheckCircle, Calendar, Download, ArrowRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 function PaymentSuccessContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
+    const paymentIntentId = searchParams.get('payment_intent');
+    const amount = searchParams.get('amount') || '50,000';
+    const hotelName = searchParams.get('hotel') || 'The Ritz-Carlton';
+    const guests = searchParams.get('guests') || '2';
+    const checkIn = searchParams.get('checkIn') ? new Date(searchParams.get('checkIn')!).toLocaleDateString() : 'Nov 24, 2024';
+    const checkOut = searchParams.get('checkOut') ? new Date(searchParams.get('checkOut')!).toLocaleDateString() : 'Nov 26, 2024';
+
     const [booking, setBooking] = useState<any>(null);
 
-    const paymentIntentId = searchParams.get('payment_intent');
-
     useEffect(() => {
-        // Trigger confetti animation
-        confetti({
-            particleCount: 100,
-            spread: 70,
-            origin: { y: 0.6 }
+        // In a real app, fetch booking details using paymentIntentId
+        setBooking({
+            confirmationNumber: Math.random().toString(36).substring(2, 10).toUpperCase(),
+            hotelName,
+            checkIn,
+            checkOut,
+            totalAmount: amount,
         });
-
-        // Fetch booking details if payment intent exists
-        if (paymentIntentId) {
-            // TODO: Fetch actual booking from API
-            setBooking({
-                confirmationNumber: 'NS-' + Math.random().toString(36).substr(2, 9).toUpperCase(),
-                hotelName: searchParams.get('hotel') || 'Hotel',
-                checkIn: new Date().toLocaleDateString(),
-                checkOut: new Date(Date.now() + 86400000 * 3).toLocaleDateString(),
-                totalAmount: parseFloat(searchParams.get('amount') || '0'),
-            });
-        }
-    }, [paymentIntentId, searchParams]);
+    }, [paymentIntentId, searchParams, amount, hotelName, checkIn, checkOut]);
 
     return (
-        <div className="min-h-screen bg-[#020617] text-white">
-            <Navbar />
-
-            <div className="max-w-4xl mx-auto px-6 py-32">
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+            <div className="max-w-xl w-full bg-white border border-slate-200 rounded-[32px] p-8 md:p-12 shadow-sm">
                 <motion.div
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.5 }}
-                    className="text-center mb-12"
+                    className="text-center mb-10"
                 >
-                    <div className="w-24 h-24 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-8 ring-4 ring-emerald-500/30">
-                        <CheckCircle className="w-12 h-12 text-emerald-500" />
+                    <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm border border-emerald-100">
+                        <CheckCircle className="w-10 h-10 text-emerald-600" />
                     </div>
-
-                    <h1 className="text-5xl font-bold mb-4 font-heading">Payment Successful!</h1>
-                    <p className="text-xl text-slate-400">
-                        Your booking has been confirmed. We've sent a confirmation email with all the details.
+                    <h1 className="text-3xl md:text-4xl font-bold text-slate-900 font-heading mb-4">Booking Confirmed!</h1>
+                    <p className="text-slate-600 text-base leading-relaxed max-w-md mx-auto">
+                        Your reservation at <span className="font-bold text-slate-900">{booking?.hotelName}</span> is complete. We've sent a confirmation email with all the details to your inbox.
                     </p>
                 </motion.div>
 
@@ -62,48 +52,30 @@ function PaymentSuccessContent() {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.2 }}
-                        className="bg-[#0f172a] rounded-[32px] p-8 md:p-12 border border-white/10 shadow-2xl mb-8"
+                        className="bg-slate-50 rounded-[24px] p-6 mb-10 border border-slate-200"
                     >
-                        <div className="flex justify-between items-start mb-8 pb-8 border-b border-white/10">
+                        <div className="flex justify-between items-start mb-6 pb-6 border-b border-slate-200">
                             <div>
-                                <p className="text-sm text-slate-500 uppercase tracking-wider mb-2">Confirmation Number</p>
-                                <p className="text-3xl font-bold text-accent-gold font-mono">{booking.confirmationNumber}</p>
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Confirmation No.</p>
+                                <p className="text-2xl font-bold text-indigo-600 font-mono tracking-widest">{booking.confirmationNumber}</p>
                             </div>
-                            <Button variant="outline" className="rounded-full border-white/10 text-white hover:bg-white hover:text-black">
-                                <Download className="w-4 h-4 mr-2" />
-                                Download Receipt
+                            <Button variant="ghost" size="icon" className="text-slate-400 hover:text-indigo-600 rounded-full">
+                                <Download className="w-5 h-5" />
                             </Button>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                            <div>
-                                <p className="text-sm text-slate-500 uppercase tracking-wider mb-2">Property</p>
-                                <p className="text-2xl font-bold text-white">{booking.hotelName}</p>
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center">
+                                <p className="text-sm font-medium text-slate-500">Guests</p>
+                                <p className="text-sm font-bold text-slate-900">{guests} Guests</p>
                             </div>
-                            <div>
-                                <p className="text-sm text-slate-500 uppercase tracking-wider mb-2">Total Paid</p>
-                                <p className="text-2xl font-bold text-white">₹{booking.totalAmount.toLocaleString()}</p>
+                            <div className="flex justify-between items-center">
+                                <p className="text-sm font-medium text-slate-500">Dates</p>
+                                <p className="text-sm font-bold text-slate-900">{booking.checkIn} — {booking.checkOut}</p>
                             </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="flex items-start gap-4">
-                                <div className="w-12 h-12 bg-accent-gold/10 rounded-full flex items-center justify-center">
-                                    <Calendar className="w-6 h-6 text-accent-gold" />
-                                </div>
-                                <div>
-                                    <p className="text-sm text-slate-500 mb-1">Check-in</p>
-                                    <p className="text-lg font-bold text-white">{booking.checkIn}</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start gap-4">
-                                <div className="w-12 h-12 bg-accent-gold/10 rounded-full flex items-center justify-center">
-                                    <Calendar className="w-6 h-6 text-accent-gold" />
-                                </div>
-                                <div>
-                                    <p className="text-sm text-slate-500 mb-1">Check-out</p>
-                                    <p className="text-lg font-bold text-white">{booking.checkOut}</p>
-                                </div>
+                            <div className="flex justify-between items-center">
+                                <p className="text-sm font-medium text-slate-500">Total Paid</p>
+                                <p className="text-sm font-bold text-slate-900">₹{booking.totalAmount}</p>
                             </div>
                         </div>
                     </motion.div>
@@ -113,26 +85,18 @@ function PaymentSuccessContent() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.4 }}
-                    className="grid grid-cols-1 md:grid-cols-3 gap-4"
+                    className="flex flex-col sm:flex-row gap-4"
                 >
-                    <Button
+                    <Button 
                         onClick={() => router.push('/dashboard')}
-                        className="bg-accent-gold text-black hover:bg-amber-400 h-14 rounded-full font-bold"
+                        className="flex-1 rounded-xl h-14 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-base shadow-md shadow-indigo-600/20"
                     >
-                        View My Bookings
-                        <ArrowRight className="w-4 h-4 ml-2" />
+                        View Bookings
                     </Button>
-                    <Button
-                        onClick={() => router.push('/search')}
-                        variant="outline"
-                        className="border-white/10 text-white hover:bg-white hover:text-black h-14 rounded-full font-bold"
-                    >
-                        Book Another Stay
-                    </Button>
-                    <Button
+                    <Button 
                         onClick={() => router.push('/')}
-                        variant="ghost"
-                        className="text-slate-400 hover:text-white h-14 rounded-full"
+                        variant="outline" 
+                        className="flex-1 rounded-xl h-14 border-slate-200 text-slate-900 hover:bg-slate-50 font-bold text-base"
                     >
                         Return Home
                     </Button>
@@ -144,7 +108,7 @@ function PaymentSuccessContent() {
 
 export default function PaymentSuccessPage() {
     return (
-        <Suspense>
+        <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center">Loading...</div>}>
             <PaymentSuccessContent />
         </Suspense>
     );
